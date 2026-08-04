@@ -1,7 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Asset, SortField, SortDirection } from '../types';
-import { defaultAssets, createNewAsset, availableAssets } from '../data';
+import { defaultAShareSymbols, createPlaceholder, availableAShares } from '../data';
+import { fetchAssetData } from '../services/aStockApi';
 import { useAuth } from '../contexts/AuthContext';
 import Header from '../components/Header';
 import AssetCard from '../components/AssetCard';
@@ -12,12 +13,66 @@ import '../App.css';
 function Dashboard() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const [assets, setAssets] = useState<Asset[]>(defaultAssets);
+  const [assets, setAssets] = useState<Asset[]>(() =>
+    defaultAShareSymbols.map(createPlaceholder)
+  );
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdate, setLastUpdate] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
   const [sortField, setSortField] = useState<SortField>('changePercent');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [filter, setFilter] = useState<'all' | 'stock' | 'crypto'>('all');
+  const refreshTimer = useRef<ReturnType<typeof setInterval>>();
+
+  // 刷新所有资产数据
+  const refreshAll = useCallback(async (symbols: string[], showLoading = true) => {
+    if (showLoading) setLoading(true);
+    if (!showLoading) setRefreshing(true);
+
+    try {
+      const results = await Promise.allSettled(
+        symbols.map(s => fetchAssetData(s))
+      );
+
+      const updated: Asset[] = [];
+      results.forEach((r, i) => {
+        if (r.status === 'fulfilled' && r.value) {
+          updated.push({
+            ...createPlaceholder(symbols[i]),
+            ...r.value,
+            id: symbols[i],
+          } as Asset);
+        } else {
+          updated.push({ ...assets.find(a => a.symbol === symbols[i]) || createPlaceholder(symbols[i]) });
+        }
+      });
+      setAssets(updated);
+
+      const now = new Date();
+      setLastUpdate(now.toLocaleTimeString('zh-CN'));
+    } catch (e) {
+      console.error('刷新数据失败:', e);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [assets]);
+
+  // 初始加载
+  useEffect(() => {
+    refreshAll(defaultAShareSymbols);
+  }, []);
+
+  // 每 30 秒自动刷新
+  useEffect(() => {
+    refreshTimer.current = setInterval(() => {
+      const symbols = assets.map(a => a.symbol);
+      if (symbols.length > 0) refreshAll(symbols, false);
+    }, 30000);
+    return () => clearInterval(refreshTimer.current);
+  }, [assets, refreshAll]);
 
   const filteredAssets = useMemo(() => {
     let result = [...assets];
@@ -40,12 +95,25 @@ function Dashboard() {
     if (selectedAsset?.id === id) setSelectedAsset(null);
   };
 
-  const handleAdd = (symbol: string) => {
-    const info = availableAssets.find(a => a.symbol === symbol);
-    if (!info) return;
-    const newAsset = createNewAsset(info.name, info.symbol, info.type, info.basePrice);
-    setAssets(prev => [...prev, newAsset]);
+  const handleAdd = async (symbol: string) => {
+    const exists = assets.find(a => a.symbol === symbol);
+    if (exists) return;
+
     setShowAddForm(false);
+    setAssets(prev => [...prev, createPlaceholder(symbol)]);
+
+    // 异步加载新资产数据
+    const data = await fetchAssetData(symbol);
+    if (data) {
+      setAssets(prev => prev.map(a =>
+        a.symbol === symbol ? { ...a, ...data, id: symbol } as Asset : a
+      ));
+    }
+  };
+
+  const handleManualRefresh = () => {
+    const symbols = assets.map(a => a.symbol);
+    if (symbols.length > 0) refreshAll(symbols, false);
   };
 
   const handleLogout = () => {
@@ -54,7 +122,7 @@ function Dashboard() {
   };
 
   const totalAssets = filteredAssets.length;
-  const nearHigh = filteredAssets.filter(a => a.currentPrice >= a.high52Week * 0.95).length;
+  const nearHigh = filteredAssets.filter(a => a.high52Week > 0 && a.currentPrice >= a.high52Week * 0.95).length;
   const avgChange = filteredAssets.length > 0
     ? Math.round(filteredAssets.reduce((s, a) => s + a.changePercent, 0) / filteredAssets.length * 100) / 100
     : 0;
@@ -82,49 +150,66 @@ function Dashboard() {
         </div>
 
         <div className="toolbar">
-          <div className="filter-tabs">
-            {(['all', 'stock', 'crypto'] as const).map(t => (
-              <button
-                key={t}
-                className={`filter-tab ${filter === t ? 'active' : ''}`}
-                onClick={() => setFilter(t)}
-              >
-                {t === 'all' ? '全部' : t === 'stock' ? '股票' : '加密货币'}
-              </button>
-            ))}
+          <div className="toolbar-left">
+            <div className="filter-tabs">
+              {(['all', 'stock', 'crypto'] as const).map(t => (
+                <button
+                  key={t}
+                  className={`filter-tab ${filter === t ? 'active' : ''}`}
+                  onClick={() => setFilter(t)}
+                >
+                  {t === 'all' ? '全部' : t === 'stock' ? 'A股' : t === 'crypto' ? '港股' : t}
+                </button>
+              ))}
+            </div>
+            {lastUpdate && (
+              <span className="update-time">
+                {refreshing ? '刷新中...' : `更新于 ${lastUpdate}`}
+                <button className="btn-refresh" onClick={handleManualRefresh} title="手动刷新">↻</button>
+              </span>
+            )}
           </div>
           <button className="btn-add" onClick={() => setShowAddForm(true)}>
             + 添加跟踪
           </button>
         </div>
 
-        <div className="asset-grid">
-          {filteredAssets.map(asset => (
-            <AssetCard
-              key={asset.id}
-              asset={asset}
-              isSelected={selectedAsset?.id === asset.id}
-              onSelect={() => setSelectedAsset(
-                selectedAsset?.id === asset.id ? null : asset
-              )}
-              onDelete={() => handleDelete(asset.id)}
-            />
-          ))}
-          {filteredAssets.length === 0 && (
-            <div className="empty-state">
-              <p>暂无跟踪资产，点击"+ 添加跟踪"开始</p>
-            </div>
-          )}
-        </div>
-
-        {selectedAsset && (
-          <div className="chart-section">
-            <div className="chart-header">
-              <h2>{selectedAsset.name} ({selectedAsset.symbol}) 近30天走势</h2>
-              <button className="btn-close" onClick={() => setSelectedAsset(null)}>✕</button>
-            </div>
-            <PriceChart asset={selectedAsset} />
+        {loading ? (
+          <div className="loading-state">
+            <div className="spinner" />
+            <p>正在加载A股实时数据...</p>
           </div>
+        ) : (
+          <>
+            <div className="asset-grid">
+              {filteredAssets.map(asset => (
+                <AssetCard
+                  key={asset.id}
+                  asset={asset}
+                  isSelected={selectedAsset?.id === asset.id}
+                  onSelect={() => setSelectedAsset(
+                    selectedAsset?.id === asset.id ? null : asset
+                  )}
+                  onDelete={() => handleDelete(asset.id)}
+                />
+              ))}
+              {filteredAssets.length === 0 && (
+                <div className="empty-state">
+                  <p>暂无跟踪资产，点击"+ 添加跟踪"开始</p>
+                </div>
+              )}
+            </div>
+
+            {selectedAsset && (
+              <div className="chart-section">
+                <div className="chart-header">
+                  <h2>{selectedAsset.name} ({selectedAsset.symbol}) 近30天走势</h2>
+                  <button className="btn-close" onClick={() => setSelectedAsset(null)}>✕</button>
+                </div>
+                <PriceChart asset={selectedAsset} />
+              </div>
+            )}
+          </>
         )}
 
         {showAddForm && (
