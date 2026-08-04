@@ -1,9 +1,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Asset, SortField, SortDirection } from '../types';
-import { defaultAShareSymbols, createPlaceholder, availableAShares } from '../data';
+import { Asset } from '../types';
+import { defaultSymbols, createPlaceholder } from '../data';
 import { fetchAssetData } from '../services/aStockApi';
-import { useAuth } from '../contexts/AuthContext';
 import Header from '../components/Header';
 import AssetCard from '../components/AssetCard';
 import AddAssetForm from '../components/AddAssetForm';
@@ -11,19 +9,15 @@ import PriceChart from '../components/PriceChart';
 import '../App.css';
 
 function Dashboard() {
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
   const [assets, setAssets] = useState<Asset[]>(() =>
-    defaultAShareSymbols.map(createPlaceholder)
+    defaultSymbols.map(createPlaceholder)
   );
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdate, setLastUpdate] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
-  const [sortField, setSortField] = useState<SortField>('changePercent');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
-  const [filter, setFilter] = useState<'all' | 'stock' | 'crypto'>('all');
+  const [filter, setFilter] = useState<'all' | 'stock' | 'etf'>('all');
   const refreshTimer = useRef<ReturnType<typeof setInterval>>();
 
   // 刷新所有资产数据
@@ -62,7 +56,7 @@ function Dashboard() {
 
   // 初始加载
   useEffect(() => {
-    refreshAll(defaultAShareSymbols);
+    refreshAll(defaultSymbols);
   }, []);
 
   // 每 30 秒自动刷新
@@ -75,20 +69,9 @@ function Dashboard() {
   }, [assets, refreshAll]);
 
   const filteredAssets = useMemo(() => {
-    let result = [...assets];
-    if (filter !== 'all') {
-      result = result.filter(a => a.type === filter);
-    }
-    result.sort((a, b) => {
-      const valA = a[sortField];
-      const valB = b[sortField];
-      if (typeof valA === 'string' && typeof valB === 'string') {
-        return sortDirection === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
-      }
-      return sortDirection === 'asc' ? (valA as number) - (valB as number) : (valB as number) - (valA as number);
-    });
-    return result;
-  }, [assets, filter, sortField, sortDirection]);
+    if (filter === 'all') return assets;
+    return assets.filter(a => a.type === filter);
+  }, [assets, filter]);
 
   const handleDelete = (id: string) => {
     setAssets(prev => prev.filter(a => a.id !== id));
@@ -116,11 +99,6 @@ function Dashboard() {
     if (symbols.length > 0) refreshAll(symbols, false);
   };
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
-  };
-
   const totalAssets = filteredAssets.length;
   const nearHigh = filteredAssets.filter(a => a.high52Week > 0 && a.currentPrice >= a.high52Week * 0.95).length;
   const avgChange = filteredAssets.length > 0
@@ -129,7 +107,7 @@ function Dashboard() {
 
   return (
     <div className="app">
-      <Header username={user?.username} onLogout={handleLogout} />
+      <Header />
 
       <main className="main">
         <div className="stats-bar">
@@ -152,13 +130,13 @@ function Dashboard() {
         <div className="toolbar">
           <div className="toolbar-left">
             <div className="filter-tabs">
-              {(['all', 'stock', 'crypto'] as const).map(t => (
+              {(['all', 'stock'] as const).map(t => (
                 <button
                   key={t}
                   className={`filter-tab ${filter === t ? 'active' : ''}`}
                   onClick={() => setFilter(t)}
                 >
-                  {t === 'all' ? '全部' : t === 'stock' ? 'A股' : t === 'crypto' ? '港股' : t}
+                  {t === 'all' ? '全部' : 'A股'}
                 </button>
               ))}
             </div>

@@ -5,37 +5,37 @@
 }
 
 .main {
-  max-width: 1200px;
+  max-width: 1300px;
   width: 100%;
   margin: 0 auto;
-  padding: 24px 20px 60px;
+  padding: 16px 16px 32px;
 }
 
-/* 统计栏 */
+/* 统计栏 — 紧凑横排 */
 .stats-bar {
   display: flex;
-  gap: 16px;
-  margin-bottom: 24px;
+  gap: 12px;
+  margin-bottom: 12px;
 }
 
 .stat-item {
   flex: 1;
   background: #fff;
-  border-radius: 12px;
-  padding: 20px;
+  border-radius: 10px;
+  padding: 12px;
   text-align: center;
   box-shadow: 0 1px 3px rgba(0,0,0,0.06);
 }
 
 .stat-label {
   display: block;
-  font-size: 13px;
+  font-size: 12px;
   color: #6b7280;
-  margin-bottom: 6px;
+  margin-bottom: 2px;
 }
 
 .stat-value {
-  font-size: 28px;
+  font-size: 22px;
   font-weight: 700;
   color: #1f2937;
 }
@@ -45,11 +45,11 @@
 }
 
 .stat-value.up {
-  color: #10b981;
+  color: #ef4444;
 }
 
 .stat-value.down {
-  color: #ef4444;
+  color: #10b981;
 }
 
 /* 工具栏 */
@@ -57,25 +57,25 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
+  margin-bottom: 12px;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 8px;
 }
 
 .filter-tabs {
   display: flex;
   background: #e5e7eb;
-  border-radius: 10px;
-  padding: 4px;
+  border-radius: 8px;
+  padding: 3px;
 }
 
 .filter-tab {
-  padding: 8px 20px;
+  padding: 6px 16px;
   border: none;
   background: transparent;
-  border-radius: 8px;
+  border-radius: 6px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   color: #4b5563;
   transition: all 0.2s;
@@ -87,20 +87,20 @@
   box-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
 
-.filter-tab:hover:not(.active) {
-  color: #6366f1;
-}
-
 .toolbar-left {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   flex-wrap: wrap;
 }
 
 .update-time {
   font-size: 12px;
-  color: #9ca3af;
+  font-weight: 600;
+  color: #6366f1;
+  background: #eef2ff;
+  padding: 4px 10px;
+  border-radius: 6px;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -109,13 +109,12 @@
 .btn-refresh {
   background: none;
   border: 1px solid #e5e7eb;
-  border-radius: 6px;
+  border-radius: 4px;
   cursor: pointer;
-  font-size: 16px;
+  font-size: 14px;
   color: #6366f1;
-  padding: 2px 6px;
+  padding: 1px 5px;
   line-height: 1;
-  transition: all 0.2s;
 }
 
 .btn-refresh:hover {
@@ -124,12 +123,12 @@
 }
 
 .btn-add {
-  padding: 10px 24px;
+  padding: 8px 20px;
   background: #6366f1;
   color: #fff;
   border: none;
-  border-radius: 10px;
-  font-size: 14px;
+  border-radius: 8px;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
@@ -137,52 +136,49 @@
 
 .btn-add:hover {
   background: #4f46e5;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
 }
 
-/* 资产卡片网格 */
+/* 卡片网格 — 固定 3 列 */
 .asset-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-  gap: 16px;
-  margin-bottom: 32px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
 }
 
 /* 图表区域 */
 .chart-section {
   background: #fff;
-  border-radius: 16px;
-  padding: 24px;
+  border-radius: 14px;
+  padding: 20px;
   box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-  margin-bottom: 24px;
+  margin-bottom: 20px;
 }
 
 .chart-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 
 .chart-header h2 {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
 }
 
 .btn-close {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border: none;
   background: #f3f4f6;
   border-radius: 50%;
   cursor: pointer;
-  font-size: 16px;
+  font-size: 14px;
   color: #6b7280;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s;
 }
 
 .btn-close:hover {
@@ -190,29 +186,27 @@
   color: #1f2937;
 }
 
-/* 空状态 */
 .empty-state {
   grid-column: 1 / -1;
   text-align: center;
-  padding: 60px 20px;
+  padding: 40px 20px;
   color: #9ca3af;
-  font-size: 15px;
+  font-size: 14px;
 }
 
-/* 加载状态 */
 .loading-state {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 80px 20px;
-  gap: 16px;
+  padding: 60px 20px;
+  gap: 12px;
 }
 
 .spinner {
-  width: 40px;
-  height: 40px;
-  border: 4px solid #e5e7eb;
+  width: 36px;
+  height: 36px;
+  border: 3px solid #e5e7eb;
   border-top-color: #6366f1;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
@@ -223,6 +217,19 @@
 }
 
 .loading-state p {
-  font-size: 14px;
+  font-size: 13px;
   color: #9ca3af;
+}
+
+/* 小屏回退 2 列 */
+@media (max-width: 900px) {
+  .asset-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .asset-grid {
+    grid-template-columns: 1fr;
+  }
 }

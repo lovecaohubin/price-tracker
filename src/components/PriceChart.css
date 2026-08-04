@@ -5,3 +5,13 @@
 .chart-container .recharts-tooltip-wrapper {
   outline: none;
 }
+
+.chart-empty,
+.chart-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 300px;
+  color: #9ca3af;
+  font-size: 14px;
+}

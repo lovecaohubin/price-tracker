@@ -1,3 +1,4 @@
+import { useEffect, useState, useRef } from 'react';
 import { Asset } from '../types';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -11,9 +12,25 @@ interface Props {
 
 function PriceChart({ asset }: Props) {
   const data = asset.priceHistory;
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    // 延迟渲染确保 DOM 容器已挂载，避免 getBoundingClientRect on null
+    const timer = requestAnimationFrame(() => setReady(true));
+    return () => cancelAnimationFrame(timer);
+  }, []);
+
+  if (!data || data.length === 0) {
+    return <div className="chart-container chart-empty">暂无K线数据</div>;
+  }
+
+  if (!ready) {
+    return <div className="chart-container chart-loading">加载中...</div>;
+  }
 
   return (
-    <div className="chart-container">
+    <div className="chart-container" ref={containerRef}>
       <ResponsiveContainer width="100%" height={300}>
         <LineChart data={data} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />

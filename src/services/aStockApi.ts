@@ -1,15 +1,8 @@
 import { Asset, PricePoint } from '../types';
 
-// 将 "sh603248" 转为东方财富 secid 格式：沪市 "1.603248"，深市 "0.000690"
-function toSecid(symbol: string): string {
-  const code = symbol.replace(/\D/g, '');
-  // 沪市：6xxxxx, 5xxxxx, 9xxxxx
-  if (code.startsWith('6') || code.startsWith('5') || code.startsWith('9')) {
-    return `1.${code}`;
-  }
-  // 深市：0xxxxx, 3xxxxx, 2xxxxx
-  return `0.${code}`;
-}
+// 腾讯行情 API 字段索引（~ 分隔，UTF-8）
+// 0=市场, 1=名称, 2=代码, 3=最新价, 4=昨收, 5=今开, 31=涨跌额, 32=涨跌幅%, 33=最高, 34=最低, 38=换手率%
+const FIELD = { NAME: 1, CODE: 2, PRICE: 3, YESTERDAY: 4, OPEN: 5, CHG_PCT: 32, CHG_AMT: 31, HIGH: 33, LOW: 34, TURNOVER: 38 };
 
 interface QuoteResult {
   name: string;
@@ -19,46 +12,45 @@ interface QuoteResult {
   high: number;
   low: number;
   changePercent: number;
+  turnoverRate: number;
 }
 
-// 批量获取实时行情（东方财富，JSON格式，UTF-8，无乱码）
+// 批量获取实时行情（腾讯 API，UTF-8，无乱码）
 export async function fetchQuotes(symbols: string[]): Promise<Map<string, QuoteResult>> {
   const result = new Map<string, QuoteResult>();
   if (symbols.length === 0) return result;
 
-  const secids = symbols.map(toSecid).join(',');
-  // f2=最新价 f3=涨跌幅 f4=涨跌额 f12=代码 f14=名称 f15=最高 f16=最低 f17=今开 f18=昨收
-  const fields = 'f2,f3,f4,f12,f14,f15,f16,f17,f18';
+  const codes = symbols.join(',');
+  const url = `/api/gtimg/utf8/q=${codes}`;
 
   try {
-    const url = `/api/em-quote/api/qt/ulist.np/get?fltt=2&secids=${secids}&fields=${fields}`;
     const resp = await fetch(url);
     if (!resp.ok) return result;
-    const json = await resp.json();
-    if (!json?.data?.diff) return result;
+    const text = await resp.text();
 
-    const diffMap: Record<string, Record<string, unknown>> = {};
-    for (const item of json.data.diff) {
-      diffMap[item.f12 as string] = item;
-    }
+    // 解析格式: v_sh603248="1~锡华科技~603248~19.48~..."
+    const lines = text.trim().split('\n');
+    for (const line of lines) {
+      const match = line.match(/v_(\w+)="(.+)"/);
+      if (!match) continue;
 
-    for (const symbol of symbols) {
-      const code = symbol.replace(/\D/g, '');
-      const item = diffMap[code];
-      if (!item) continue;
+      const rawSymbol = match[1]; // sh603248
+      const fields = match[2].split('~');
+      if (fields.length < 35) continue;
 
-      const currentPrice = (item.f2 as number) || 0;
-      const yesterdayClose = (item.f18 as number) || 0;
-      const changePercent = (item.f3 as number) || 0;
+      // 找到对应的完整 symbol
+      const symbol = symbols.find(s => s.toLowerCase() === rawSymbol.toLowerCase());
+      if (!symbol) continue;
 
       result.set(symbol, {
-        name: String(item.f14 || symbol),
-        currentPrice,
-        open: (item.f17 as number) || 0,
-        yesterdayClose,
-        high: (item.f15 as number) || 0,
-        low: (item.f16 as number) || 0,
-        changePercent,
+        name: fields[FIELD.NAME] || symbol,
+        currentPrice: parseFloat(fields[FIELD.PRICE]) || 0,
+        open: parseFloat(fields[FIELD.OPEN]) || 0,
+        yesterdayClose: parseFloat(fields[FIELD.YESTERDAY]) || 0,
+        high: parseFloat(fields[FIELD.HIGH]) || 0,
+        low: parseFloat(fields[FIELD.LOW]) || 0,
+        changePercent: parseFloat(fields[FIELD.CHG_PCT]) || 0,
+        turnoverRate: parseFloat(fields[FIELD.TURNOVER]) || 0,
       });
     }
   } catch (e) {
@@ -68,56 +60,83 @@ export async function fetchQuotes(symbols: string[]): Promise<Map<string, QuoteR
   return result;
 }
 
-// 获取 K 线数据（东方财富，JSON 格式）
-export async function fetchKLine(symbol: string, days = 250): Promise<PricePoint[]> {
-  const secid = toSecid(symbol);
-
-  try {
-    const url = `/api/em-kline/api/qt/stock/kline/get?secid=${secid}&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57&klt=101&fqt=1&end=20500101&lmt=${days}`;
-    const resp = await fetch(url);
-    if (!resp.ok) return [];
-    const json = await resp.json();
-    if (!json?.data?.klines) return [];
-
-    const klines: string[] = json.data.klines;
-    return klines.map((line: string) => {
-      const [date, , close] = line.split(',');
-      return { date, price: parseFloat(close) };
-    });
-  } catch (e) {
-    console.error(`获取 ${symbol} K线失败:`, e);
-    return [];
-  }
-}
-
-// 计算 52 周最高价
-export function calc52WeekHigh(klines: PricePoint[]): number {
-  if (klines.length === 0) return 0;
+// 从 K线 JSON 解析最高价
+function calcMaxHigh(rawKlines: string[][]): number {
   let max = 0;
-  for (const k of klines) {
-    if (k.price > max) max = k.price;
+  for (const k of rawKlines) {
+    const dayHigh = parseFloat(k[3]) || 0;
+    if (dayHigh > max) max = dayHigh;
   }
   return max;
 }
 
+// 从 K线 JSON 提取最近 N 条收盘价
+function extractPrices(rawKlines: string[][], count: number): PricePoint[] {
+  const result: PricePoint[] = [];
+  const slice = rawKlines.slice(-count);
+  for (const k of slice) {
+    result.push({ date: k[0], price: parseFloat(k[2]) || 0 });
+  }
+  return result;
+}
+
 // 完整获取一只股票的数据
+// 日线：算 52 周新高 + 走势图；周线：算历史最高（覆盖 2010 年起数据）
 export async function fetchAssetData(symbol: string): Promise<Partial<Asset> | null> {
   const quotes = await fetchQuotes([symbol]);
   const quote = quotes.get(symbol);
   if (!quote) return null;
 
-  const klines = await fetchKLine(symbol, 250);
-  const high52Week = calc52WeekHigh(klines);
-  const recentKlines = klines.slice(-30);
+  const code = symbol.toLowerCase();
+  let high52Week = quote.high;
+  let allTimeHigh = quote.high;
+  const recentKlines: PricePoint[] = [];
+
+  try {
+    // 日线：52周新高 + 30天走势图
+    const dayResp = await fetch(`/api/kline?symbol=${code}&period=day`);
+    if (dayResp.ok) {
+      const json = await dayResp.json();
+      const stockData = json.data?.[code];
+      if (json.code === 0 && stockData && typeof stockData === 'object') {
+        const raw: string[][] = stockData.qfqday || stockData.day || [];
+        console.log(`[${symbol}] 日线 ${raw.length} 条`);
+
+        const oneYearKlines = raw.slice(-250);
+        high52Week = calcMaxHigh(oneYearKlines);
+        if (quote.high > high52Week) high52Week = quote.high;
+
+        recentKlines.push(...extractPrices(raw, 30));
+      }
+    }
+
+    // 周线：历史最高（从 2010 年起，覆盖 16 年）
+    const weekResp = await fetch(`/api/kline?symbol=${code}&period=week`);
+    if (weekResp.ok) {
+      const json = await weekResp.json();
+      const stockData = json.data?.[code];
+      if (json.code === 0 && stockData && typeof stockData === 'object') {
+        const raw: string[][] = stockData.qfqweek || stockData.week || [];
+        console.log(`[${symbol}] 周线 ${raw.length} 条`);
+
+        allTimeHigh = calcMaxHigh(raw);
+        if (quote.high > allTimeHigh) allTimeHigh = quote.high;
+      }
+    }
+
+    console.log(`[${symbol}] 今日:${quote.high}  52周新高:${high52Week}  历史最高:${allTimeHigh}  当前价:${quote.currentPrice}`);
+  } catch (e) {
+    console.error(`[${symbol}] K线请求失败:`, e);
+  }
 
   return {
     name: quote.name,
     symbol,
-    type: 'stock',
     currentPrice: quote.currentPrice,
     high52Week: high52Week || quote.high,
-    allTimeHigh: high52Week || quote.high,
+    allTimeHigh: allTimeHigh || quote.high,
     changePercent: Math.round(quote.changePercent * 100) / 100,
     priceHistory: recentKlines,
+    turnoverRate: Math.round(quote.turnoverRate * 100) / 100,
   };
 }

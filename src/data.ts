@@ -1,17 +1,24 @@
 import { Asset } from './types';
 
-// A股默认跟踪资产（仅做占位，实际数据由 API 填充）
-export const defaultAShareSymbols = [
-  'sh603248',  // 中岩大地
+// 默认跟踪资产（按指定顺序排列）
+export const defaultSymbols = [
+  'sh603248',  // 锡华科技
   'sz000690',  // 宝新能源
   'sz300847',  // 中船汉光
   'sh603267',  // 鸿远电子
   'sz000858',  // 五粮液
+  'sh512170',  // 医疗ETF
+  'sh516610',  // 医疗服务ETF
 ];
+
+// A股默认跟踪（兼容旧引用）
+export const defaultAShareSymbols = defaultSymbols.filter(s => s.startsWith('sh6') || s.startsWith('sz0') || s.startsWith('sz3'));
+// ETF 默认跟踪（兼容旧引用）
+export const defaultETFSymbols = defaultSymbols.filter(s => !defaultAShareSymbols.includes(s));
 
 // 可选添加的A股列表
 export const availableAShares = [
-  { name: '中岩大地', symbol: 'sh603248' },
+  { name: '锡华科技', symbol: 'sh603248' },
   { name: '宝新能源', symbol: 'sz000690' },
   { name: '中船汉光', symbol: 'sz300847' },
   { name: '鸿远电子', symbol: 'sh603267' },
@@ -41,18 +48,28 @@ export const availableAShares = [
   { name: '中国中铁', symbol: 'sh601390' },
 ];
 
+// ETF 列表
+export const availableETFs = [
+  { name: '医疗ETF',       symbol: 'sh512170' },
+  { name: '医疗服务ETF',   symbol: 'sh516610' },
+];
+
+// 所有资产统一查找
+const allAssets = [...availableAShares.map(a => ({ ...a, type: 'stock' as const })), ...availableETFs.map(a => ({ ...a, type: 'etf' as const }))];
+
 // 创建占位资产（API数据加载前显示）
 export function createPlaceholder(symbol: string): Asset {
-  const info = availableAShares.find(a => a.symbol === symbol);
+  const info = allAssets.find(a => a.symbol === symbol);
   return {
     id: symbol,
     name: info?.name || symbol,
     symbol,
-    type: 'stock',
+    type: info?.type || 'stock',
     currentPrice: 0,
     high52Week: 0,
     allTimeHigh: 0,
     changePercent: 0,
     priceHistory: [],
+    turnoverRate: 0,
   };
 }

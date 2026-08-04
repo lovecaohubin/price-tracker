@@ -1,7 +1,7 @@
 .asset-card {
   background: #fff;
-  border-radius: 14px;
-  padding: 20px;
+  border-radius: 12px;
+  padding: 14px 16px;
   box-shadow: 0 1px 3px rgba(0,0,0,0.06);
   cursor: pointer;
   transition: all 0.2s;
@@ -27,28 +27,39 @@
   border-color: #f59e0b;
 }
 
+/* 顶部：名称 + 删除 */
 .card-top {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 14px;
+  align-items: center;
+  margin-bottom: 10px;
 }
 
 .asset-info {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.asset-name-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
 }
 
 .type-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  font-size: 12px;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  font-size: 11px;
   font-weight: 700;
+  flex-shrink: 0;
 }
 
 .type-badge.stock {
@@ -61,32 +72,42 @@
   color: #db2777;
 }
 
+.type-badge.etf {
+  background: #d1fae5;
+  color: #059669;
+}
+
 .asset-name {
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 600;
   color: #1f2937;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .asset-symbol {
-  font-size: 12px;
+  font-size: 11px;
   color: #9ca3af;
   font-weight: 500;
+  flex-shrink: 0;
 }
 
 .btn-delete {
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   border: none;
   background: transparent;
-  border-radius: 6px;
+  border-radius: 4px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 12px;
   color: #cbd5e1;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s;
+  flex-shrink: 0;
   opacity: 0;
+  transition: all 0.2s;
 }
 
 .asset-card:hover .btn-delete {
@@ -98,72 +119,83 @@
   color: #ef4444;
 }
 
+/* 价格行 */
 .card-price {
   display: flex;
   align-items: baseline;
   gap: 10px;
-  margin-bottom: 16px;
+  margin-bottom: 10px;
 }
 
 .current-price {
-  font-size: 28px;
+  font-size: 24px;
   font-weight: 700;
   color: #1f2937;
+  line-height: 1;
 }
 
 .change-badge {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 6px;
+  padding: 2px 6px;
+  border-radius: 4px;
 }
 
 .change-badge.up {
-  color: #10b981;
-  background: #ecfdf5;
-}
-
-.change-badge.down {
   color: #ef4444;
   background: #fef2f2;
 }
 
-.card-highs {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 14px;
+.change-badge.down {
+  color: #10b981;
+  background: #ecfdf5;
 }
 
-.high-row {
+/* 换手率 */
+.turnover-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b7280;
+  padding: 1px 6px;
+  background: #f3f4f6;
+  border-radius: 4px;
+}
+
+/* 52周新高 + 历史最高 并排一行 */
+.card-highs {
+  margin-bottom: 10px;
+}
+
+.high-one-row {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  gap: 12px;
 }
 
-.high-label {
-  font-size: 13px;
-  color: #9ca3af;
-}
-
-.high-value {
-  font-size: 14px;
+.high-item {
+  font-size: 12px;
   font-weight: 600;
   color: #4b5563;
 }
 
+.high-item label {
+  font-weight: 400;
+  color: #9ca3af;
+  margin-right: 4px;
+}
+
 /* 进度条 */
 .progress-section {
-  padding-top: 12px;
+  padding-top: 8px;
   border-top: 1px solid #f3f4f6;
 }
 
 .progress-bar-bg {
-  height: 6px;
+  height: 5px;
   background: #f3f4f6;
   border-radius: 3px;
   overflow: hidden;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .progress-bar-fill {
@@ -188,7 +220,7 @@
 }
 
 .progress-text {
-  font-size: 12px;
+  font-size: 11px;
   color: #9ca3af;
 }
 

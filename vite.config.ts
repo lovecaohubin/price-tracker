@@ -1,21 +1,69 @@
-import { defineConfig } from 'vite'
+import { defineConfig, Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
+import https from 'https'
+
+// 自定义中间件：用 Node.js 原生 https 获取 K 线数据，绕过代理层限制
+function klinePlugin(): Plugin {
+  return {
+    name: 'kline-middleware',
+    configureServer(server) {
+      server.middlewares.use('/api/kline', (req, res) => {
+        const url = new URL(req.url!, `http://${req.headers.host}`)
+        const symbol = url.searchParams.get('symbol')
+        const period = url.searchParams.get('period') || 'day'  // day | week
+
+        if (!symbol) {
+          res.writeHead(400, { 'Content-Type': 'application/json' })
+          return res.end(JSON.stringify({ error: 'Missing symbol' }))
+        }
+
+        // 日线：不设起始日期，2000条（约8年）
+        // 周线：从2010年开始，1000条（约16年），覆盖历史最高点
+        const param = period === 'week'
+          ? `${symbol},week,2010-01-01,,1000,qfq`
+          : `${symbol},day,,,2000,qfq`
+        const apiUrl = `https://ifzq.gtimg.cn/appstock/app/fqkline/get?param=${param}`
+
+        console.log(`[K线中间件] 请求: ${apiUrl}`)
+        https.get(apiUrl, {
+          headers: {
+            'Referer': 'https://gu.qq.com/',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+          },
+        }, (proxyRes) => {
+          let data = ''
+          proxyRes.on('data', chunk => data += chunk)
+          proxyRes.on('end', () => {
+            console.log(`[K线中间件] ${symbol} 状态:${proxyRes.statusCode}, 数据长度:${data.length}`)
+            res.setHeader('Content-Type', 'application/json; charset=utf-8')
+            res.setHeader('Access-Control-Allow-Origin', '*')
+            res.end(data)
+          })
+        }).on('error', (err) => {
+          console.error(`[K线中间件] ${symbol} 失败:`, err.message)
+          res.writeHead(500, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ error: err.message }))
+        })
+      })
+    },
+  }
+}
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), klinePlugin()],
   server: {
     proxy: {
-      // 东方财富 - 实时行情（JSON，UTF-8，无乱码）
-      '/api/em-quote': {
-        target: 'https://push2.eastmoney.com',
+      // 腾讯股票API - 实时行情（UTF-8）
+      '/api/gtimg': {
+        target: 'https://qt.gtimg.cn',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/em-quote/, ''),
-      },
-      // 东方财富 - K 线数据
-      '/api/em-kline': {
-        target: 'https://push2his.eastmoney.com',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/em-kline/, ''),
+        secure: false,
+        rewrite: (path) => path.replace(/^\/api\/gtimg/, ''),
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq) => {
+            proxyReq.setHeader('Referer', 'https://gu.qq.com/')
+          })
+        },
       },
     },
   },
