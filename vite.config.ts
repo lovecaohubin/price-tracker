@@ -5,16 +5,17 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      '/api/sina': {
-        target: 'http://hq.sinajs.cn',
+      // 东方财富 - 实时行情（JSON，UTF-8，无乱码）
+      '/api/em-quote': {
+        target: 'https://push2.eastmoney.com',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/sina/, ''),
-        headers: { Referer: 'https://finance.sina.com.cn' },
+        rewrite: (path) => path.replace(/^\/api\/em-quote/, ''),
       },
-      '/api/em': {
+      // 东方财富 - K 线数据
+      '/api/em-kline': {
         target: 'https://push2his.eastmoney.com',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/em/, ''),
+        rewrite: (path) => path.replace(/^\/api\/em-kline/, ''),
       },
     },
   },
