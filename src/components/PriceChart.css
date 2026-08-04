@@ -1,0 +1,7 @@
+.chart-container {
+  width: 100%;
+}
+
+.chart-container .recharts-tooltip-wrapper {
+  outline: none;
+}

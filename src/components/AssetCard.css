@@ -1,0 +1,198 @@
+.asset-card {
+  background: #fff;
+  border-radius: 14px;
+  padding: 20px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 2px solid transparent;
+  position: relative;
+}
+
+.asset-card:hover {
+  box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+  transform: translateY(-2px);
+}
+
+.asset-card.selected {
+  border-color: #6366f1;
+  box-shadow: 0 4px 20px rgba(99, 102, 241, 0.15);
+}
+
+.asset-card.at-high {
+  background: linear-gradient(135deg, #fef3c7 0%, #fff 50%);
+}
+
+.asset-card.near-high {
+  border-color: #f59e0b;
+}
+
+.card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+
+.asset-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.type-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.type-badge.stock {
+  background: #dbeafe;
+  color: #2563eb;
+}
+
+.type-badge.crypto {
+  background: #fce7f3;
+  color: #db2777;
+}
+
+.asset-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.asset-symbol {
+  font-size: 12px;
+  color: #9ca3af;
+  font-weight: 500;
+}
+
+.btn-delete {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #cbd5e1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  opacity: 0;
+}
+
+.asset-card:hover .btn-delete {
+  opacity: 1;
+}
+
+.btn-delete:hover {
+  background: #fee2e2;
+  color: #ef4444;
+}
+
+.card-price {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.current-price {
+  font-size: 28px;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.change-badge {
+  font-size: 14px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.change-badge.up {
+  color: #10b981;
+  background: #ecfdf5;
+}
+
+.change-badge.down {
+  color: #ef4444;
+  background: #fef2f2;
+}
+
+.card-highs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.high-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.high-label {
+  font-size: 13px;
+  color: #9ca3af;
+}
+
+.high-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: #4b5563;
+}
+
+/* 进度条 */
+.progress-section {
+  padding-top: 12px;
+  border-top: 1px solid #f3f4f6;
+}
+
+.progress-bar-bg {
+  height: 6px;
+  background: #f3f4f6;
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: #6366f1;
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+
+.progress-bar-fill.warn {
+  background: linear-gradient(90deg, #f59e0b, #ef4444);
+}
+
+.progress-bar-fill.full {
+  background: #ef4444;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.progress-text {
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.progress-text.warn {
+  color: #f59e0b;
+  font-weight: 600;
+}
