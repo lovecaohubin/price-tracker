@@ -66,9 +66,12 @@ function Dashboard() {
     refreshAll(defaultSymbols);
   }, []);
 
-  // 每 10 秒自动刷新
+  // 每 10 秒自动刷新（仅交易时段 09:00-15:00）
   useEffect(() => {
     refreshTimer.current = setInterval(() => {
+      const now = new Date();
+      const hour = now.getHours();
+      if (hour < 9 || hour >= 15) return;
       const symbols = assets.map(a => a.symbol);
       if (symbols.length > 0) refreshAll(symbols, false);
     }, 10000);
