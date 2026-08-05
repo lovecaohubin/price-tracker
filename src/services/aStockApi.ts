@@ -4,6 +4,34 @@ import { Asset, PricePoint } from '../types';
 // 0=市场, 1=名称, 2=代码, 3=最新价, 4=昨收, 5=今开, 31=涨跌额, 32=涨跌幅%, 33=最高, 34=最低, 38=换手率%
 const FIELD = { NAME: 1, CODE: 2, PRICE: 3, YESTERDAY: 4, OPEN: 5, CHG_PCT: 32, CHG_AMT: 31, HIGH: 33, LOW: 34, TURNOVER: 38 };
 
+// ====== 昨日换手率缓存（localStorage） ======
+const TURNOVER_PREFIX = 'turnover_';
+
+function dateKey(offset = 0): string {
+  const d = new Date();
+  d.setDate(d.getDate() + offset);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** 获取昨日收盘换手率（从 localStorage 读取） */
+export function getYesterdayTurnoverRate(symbol: string): number | undefined {
+  try {
+    const yesterday = dateKey(-1);
+    const val = localStorage.getItem(TURNOVER_PREFIX + symbol + '_' + yesterday);
+    return val != null ? parseFloat(val) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** 保存今日换手率到 localStorage（供明日环比使用） */
+export function saveTodayTurnoverRate(symbol: string, rate: number): void {
+  try {
+    const today = dateKey(0);
+    localStorage.setItem(TURNOVER_PREFIX + symbol + '_' + today, rate.toFixed(4));
+  } catch { /* ignore */ }
+}
+
 interface QuoteResult {
   name: string;
   currentPrice: number;

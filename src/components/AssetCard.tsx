@@ -1,6 +1,14 @@
 import { Asset } from '../types';
 import './AssetCard.css';
 
+function getTurnoverLevel(rate: number): string {
+  if (rate >= 20) return 'hot';
+  if (rate >= 15) return 'high';
+  if (rate >= 7) return 'warn';
+  if (rate >= 3) return 'mid';
+  return '';
+}
+
 interface Props {
   asset: Asset;
   isSelected: boolean;
@@ -49,7 +57,13 @@ function AssetCard({ asset, isSelected, onSelect, onDelete }: Props) {
         <span className={`change-badge ${asset.changePercent >= 0 ? 'up' : 'down'}`}>
           {asset.changePercent >= 0 ? '↑' : '↓'} {Math.abs(asset.changePercent)}%
         </span>
-        <span className="turnover-badge">换手 {asset.turnoverRate.toFixed(2)}%</span>
+        <span className={`turnover-badge ${getTurnoverLevel(asset.turnoverRate)}`}>换手 {asset.turnoverRate.toFixed(2)}%</span>
+        {asset.prevTurnoverRate != null && asset.prevTurnoverRate !== asset.turnoverRate && (
+          <span className={`turnover-delta ${asset.turnoverRate > asset.prevTurnoverRate ? 'up' : 'down'}`}>
+            {asset.turnoverRate > asset.prevTurnoverRate ? '↑' : '↓'}
+            {Math.abs(asset.turnoverRate - asset.prevTurnoverRate).toFixed(2)}%
+          </span>
+        )}
       </div>
 
       <div className="card-highs">

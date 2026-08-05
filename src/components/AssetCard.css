@@ -161,6 +161,40 @@
   border-radius: 4px;
 }
 
+/* 换手率颜色分级 */
+.turnover-badge.mid {         /* 3%-7% 橙色 */
+  color: #ea580c;
+  background: #fff7ed;
+}
+.turnover-badge.warn {       /* 7%-15% 浅红色 */
+  color: #f87171;
+  background: #fef2f2;
+}
+.turnover-badge.high {       /* 15%-20% 红色 */
+  color: #ef4444;
+  background: #fee2e2;
+}
+.turnover-badge.hot {        /* 20%以上 深红色 */
+  color: #dc2626;
+  background: #fecaca;
+}
+
+/* 换手率环比变化 */
+.turnover-delta {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+.turnover-delta.up {
+  color: #dc2626;
+  background: #fef2f2;
+}
+.turnover-delta.down {
+  color: #10b981;
+  background: #ecfdf5;
+}
+
 /* 52周新高 + 历史最高 并排一行 */
 .card-highs {
   margin-bottom: 10px;

@@ -9,7 +9,8 @@ export interface Asset {
   allTimeHigh: number;    // 历史最高
   changePercent: number;  // 今日涨跌幅 %
   priceHistory: PricePoint[];  // 近30天价格走势
-  turnoverRate: number;   // 换手率 %
+  turnoverRate: number;       // 换手率 %
+  prevTurnoverRate?: number;  // 上一轮换手率 %（用于计算环比变化）
 
 }
 
