@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { Asset } from '../types';
 import { defaultSymbols, createPlaceholder } from '../data';
-import { fetchAssetData, getYesterdayTurnoverRate, saveTodayTurnoverRate } from '../services/aStockApi';
+import { fetchAssetData } from '../services/aStockApi';
 import Header from '../components/Header';
 import AssetCard from '../components/AssetCard';
 import AddAssetForm from '../components/AddAssetForm';
@@ -33,17 +33,10 @@ function Dashboard() {
       const updated: Asset[] = [];
       results.forEach((r, i) => {
         if (r.status === 'fulfilled' && r.value) {
-          // 用 localStorage 中的昨日收盘换手率做环比基准
-          const yesterdayRate = getYesterdayTurnoverRate(symbols[i]);
-          // 保存今日换手率供明日环比
-          if (r.value.turnoverRate != null) {
-            saveTodayTurnoverRate(symbols[i], r.value.turnoverRate);
-          }
           updated.push({
             ...createPlaceholder(symbols[i]),
             ...r.value,
             id: symbols[i],
-            prevTurnoverRate: yesterdayRate,
           } as Asset);
         } else {
           updated.push({ ...assets.find(a => a.symbol === symbols[i]) || createPlaceholder(symbols[i]) });

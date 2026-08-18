@@ -4,34 +4,6 @@ import { Asset, PricePoint } from '../types';
 // 0=市场, 1=名称, 2=代码, 3=最新价, 4=昨收, 5=今开, 31=涨跌额, 32=涨跌幅%, 33=最高, 34=最低, 38=换手率%
 const FIELD = { NAME: 1, CODE: 2, PRICE: 3, YESTERDAY: 4, OPEN: 5, CHG_PCT: 32, CHG_AMT: 31, HIGH: 33, LOW: 34, TURNOVER: 38 };
 
-// ====== 昨日换手率缓存（localStorage） ======
-const TURNOVER_PREFIX = 'turnover_';
-
-function dateKey(offset = 0): string {
-  const d = new Date();
-  d.setDate(d.getDate() + offset);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-/** 获取昨日收盘换手率（从 localStorage 读取） */
-export function getYesterdayTurnoverRate(symbol: string): number | undefined {
-  try {
-    const yesterday = dateKey(-1);
-    const val = localStorage.getItem(TURNOVER_PREFIX + symbol + '_' + yesterday);
-    return val != null ? parseFloat(val) : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-/** 保存今日换手率到 localStorage（供明日环比使用） */
-export function saveTodayTurnoverRate(symbol: string, rate: number): void {
-  try {
-    const today = dateKey(0);
-    localStorage.setItem(TURNOVER_PREFIX + symbol + '_' + today, rate.toFixed(4));
-  } catch { /* ignore */ }
-}
-
 interface QuoteResult {
   name: string;
   currentPrice: number;
@@ -98,6 +70,16 @@ function calcMaxHigh(rawKlines: string[][]): number {
   return max;
 }
 
+// 从 K线 JSON 解析最低价（忽略无效值）
+function calcMinLow(rawKlines: string[][]): number {
+  let min = Infinity;
+  for (const k of rawKlines) {
+    const dayLow = parseFloat(k[4]) || 0;
+    if (dayLow > 0 && dayLow < min) min = dayLow;
+  }
+  return min === Infinity ? 0 : min;
+}
+
 // 从 K线 JSON 提取最近 N 条收盘价
 function extractPrices(rawKlines: string[][], count: number): PricePoint[] {
   const result: PricePoint[] = [];
@@ -109,7 +91,7 @@ function extractPrices(rawKlines: string[][], count: number): PricePoint[] {
 }
 
 // 完整获取一只股票的数据
-// 日线：算 52 周新高 + 走势图；周线：算历史最高（覆盖 2010 年起数据）
+// 日线：算 52 周新高 + 走势图；周线：算历史最高/最低（2000 年起，覆盖约 27 年）
 export async function fetchAssetData(symbol: string): Promise<Partial<Asset> | null> {
   const quotes = await fetchQuotes([symbol]);
   const quote = quotes.get(symbol);
@@ -118,6 +100,7 @@ export async function fetchAssetData(symbol: string): Promise<Partial<Asset> | n
   const code = symbol.toLowerCase();
   let high52Week = quote.high;
   let allTimeHigh = quote.high;
+  let lowSince2000 = quote.low;
   const recentKlines: PricePoint[] = [];
 
   try {
@@ -138,21 +121,27 @@ export async function fetchAssetData(symbol: string): Promise<Partial<Asset> | n
       }
     }
 
-    // 周线：历史最高（从 2010 年起，覆盖 16 年）
+    // 周线：历史最高/最低（从 2000 年起，覆盖约 27 年）
     const weekResp = await fetch(`/api/kline?symbol=${code}&period=week`);
     if (weekResp.ok) {
       const json = await weekResp.json();
       const stockData = json.data?.[code];
       if (json.code === 0 && stockData && typeof stockData === 'object') {
-        const raw: string[][] = stockData.qfqweek || stockData.week || [];
+        const raw: string[][] = stockData.week || stockData.qfqweek || [];
         console.log(`[${symbol}] 周线 ${raw.length} 条`);
 
         allTimeHigh = calcMaxHigh(raw);
         if (quote.high > allTimeHigh) allTimeHigh = quote.high;
+
+        // 2000 年以来历史最低（与当日最低取较小值）
+        const weekMin = calcMinLow(raw);
+        if (weekMin > 0) {
+          lowSince2000 = lowSince2000 > 0 ? Math.min(lowSince2000, weekMin) : weekMin;
+        }
       }
     }
 
-    console.log(`[${symbol}] 今日:${quote.high}  52周新高:${high52Week}  历史最高:${allTimeHigh}  当前价:${quote.currentPrice}`);
+    console.log(`[${symbol}] 今日:${quote.high}  52周新高:${high52Week}  历史最高:${allTimeHigh}  历史最低:${lowSince2000}  当前价:${quote.currentPrice}`);
   } catch (e) {
     console.error(`[${symbol}] K线请求失败:`, e);
   }
@@ -163,6 +152,7 @@ export async function fetchAssetData(symbol: string): Promise<Partial<Asset> | n
     currentPrice: quote.currentPrice,
     high52Week: high52Week || quote.high,
     allTimeHigh: allTimeHigh || quote.high,
+    lowSince2000: lowSince2000 || quote.low,
     changePercent: Math.round(quote.changePercent * 100) / 100,
     priceHistory: recentKlines,
     turnoverRate: Math.round(quote.turnoverRate * 100) / 100,

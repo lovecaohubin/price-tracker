@@ -71,5 +71,6 @@ export function createPlaceholder(symbol: string): Asset {
     changePercent: 0,
     priceHistory: [],
     turnoverRate: 0,
+    lowSince2000: 0,
   };
 }

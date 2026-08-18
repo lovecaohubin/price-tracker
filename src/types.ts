@@ -10,7 +10,7 @@ export interface Asset {
   changePercent: number;  // 今日涨跌幅 %
   priceHistory: PricePoint[];  // 近30天价格走势
   turnoverRate: number;       // 换手率 %
-  prevTurnoverRate?: number;  // 上一轮换手率 %（用于计算环比变化）
+  lowSince2000: number;       // 2000年以来历史最低
 
 }
 

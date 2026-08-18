@@ -179,23 +179,7 @@
   background: #fecaca;
 }
 
-/* 换手率环比变化 */
-.turnover-delta {
-  font-size: 10px;
-  font-weight: 600;
-  padding: 1px 5px;
-  border-radius: 4px;
-}
-.turnover-delta.up {
-  color: #dc2626;
-  background: #fef2f2;
-}
-.turnover-delta.down {
-  color: #10b981;
-  background: #ecfdf5;
-}
-
-/* 52周新高 + 历史最高 并排一行 */
+/* 52周新高 + 历史最高 + 历史最低 并排一行 */
 .card-highs {
   margin-bottom: 10px;
 }
@@ -203,7 +187,8 @@
 .high-one-row {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 4px 12px;
 }
 
 .high-item {

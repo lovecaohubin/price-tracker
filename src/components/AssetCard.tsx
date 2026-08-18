@@ -58,18 +58,13 @@ function AssetCard({ asset, isSelected, onSelect, onDelete }: Props) {
           {asset.changePercent >= 0 ? '↑' : '↓'} {Math.abs(asset.changePercent)}%
         </span>
         <span className={`turnover-badge ${getTurnoverLevel(asset.turnoverRate)}`}>换手 {asset.turnoverRate.toFixed(2)}%</span>
-        {asset.prevTurnoverRate != null && asset.prevTurnoverRate !== asset.turnoverRate && (
-          <span className={`turnover-delta ${asset.turnoverRate > asset.prevTurnoverRate ? 'up' : 'down'}`}>
-            {asset.turnoverRate > asset.prevTurnoverRate ? '↑' : '↓'}
-            {Math.abs(asset.turnoverRate - asset.prevTurnoverRate).toFixed(2)}%
-          </span>
-        )}
       </div>
 
       <div className="card-highs">
         <div className="high-one-row">
           <span className="high-item"><label>52周新高</label> {formatPrice(asset.high52Week)}</span>
           <span className="high-item"><label>历史最高</label> {formatPrice(asset.allTimeHigh)}</span>
+          <span className="high-item"><label>历史最低</label> {formatPrice(asset.lowSince2000)}</span>
         </div>
       </div>
 

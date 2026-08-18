@@ -17,10 +17,10 @@ function klinePlugin(): Plugin {
           return res.end(JSON.stringify({ error: 'Missing symbol' }))
         }
 
-        // 日线：不设起始日期，2000条（约8年）
-        // 周线：从2010年开始，1000条（约16年），覆盖历史最高点
+        // 日线：不设起始日期，2000条（约8年），前复权保证走势连续
+        // 周线：从2000年开始，1400条（约27年），用不复权(bfq)计算真实的历史最高/最低价格
         const param = period === 'week'
-          ? `${symbol},week,2010-01-01,,1000,qfq`
+          ? `${symbol},week,2000-01-01,,1400,bfq`
           : `${symbol},day,,,2000,qfq`
         const apiUrl = `https://ifzq.gtimg.cn/appstock/app/fqkline/get?param=${param}`
 
