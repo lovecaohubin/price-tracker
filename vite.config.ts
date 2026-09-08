@@ -22,7 +22,8 @@ function klinePlugin(): Plugin {
         const param = period === 'week'
           ? `${symbol},week,2000-01-01,,1400,bfq`
           : `${symbol},day,,,2000,qfq`
-        const apiUrl = `https://ifzq.gtimg.cn/appstock/app/fqkline/get?param=${param}`
+        // 使用 web.ifzq.gtimg.cn：ifzq.gtimg.cn 会被腾讯 WAF 拦截返回 501 HTML
+        const apiUrl = `https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${param}`
 
         console.log(`[K线中间件] 请求: ${apiUrl}`)
         https.get(apiUrl, {
