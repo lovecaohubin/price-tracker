@@ -6,6 +6,20 @@
   outline: none;
 }
 
+/* 图表浮层统一卡片质感 */
+.chart-container .recharts-default-tooltip {
+  border: 1px solid #eef1f6 !important;
+  border-radius: 10px !important;
+  box-shadow: 0 8px 24px rgba(20, 30, 55, 0.10) !important;
+  padding: 8px 12px !important;
+  font-size: 12px !important;
+}
+
+.chart-container .recharts-tooltip-label {
+  color: #6b7280 !important;
+  margin-bottom: 2px !important;
+}
+
 .chart-empty,
 .chart-loading {
   display: flex;
@@ -14,4 +28,6 @@
   height: 300px;
   color: #9ca3af;
   font-size: 14px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #fbfcfe, #ffffff);
 }

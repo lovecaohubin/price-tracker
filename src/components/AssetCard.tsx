@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import { Asset } from '../types';
 import './AssetCard.css';
 
@@ -12,11 +13,13 @@ function getTurnoverLevel(rate: number): string {
 interface Props {
   asset: Asset;
   isSelected: boolean;
+  shares: number;                        // 持仓股数
+  onSharesChange: (shares: number) => void;
   onSelect: () => void;
   onDelete: () => void;
 }
 
-function AssetCard({ asset, isSelected, onSelect, onDelete }: Props) {
+function AssetCard({ asset, isSelected, shares, onSharesChange, onSelect, onDelete }: Props) {
   const safe52W = asset.high52Week || 1;
   const safeATH = asset.allTimeHigh || 1;
   const gap52W = ((safe52W - asset.currentPrice) / safe52W) * 100;
@@ -29,6 +32,32 @@ function AssetCard({ asset, isSelected, onSelect, onDelete }: Props) {
     if (p >= 1) return p.toFixed(2);
     return p.toFixed(4);
   };
+
+  const formatAmount = (v: number) =>
+    v >= 10000
+      ? `${(v / 10000).toLocaleString('zh-CN', { maximumFractionDigits: 2 })}万`
+      : v.toLocaleString('zh-CN', { maximumFractionDigits: 2 });
+
+  // 股数用本地草稿保证输入过程流畅；只在外部值真正变化时回填
+  const [sharesDraft, setSharesDraft] = useState(() => (shares > 0 ? String(shares) : ''));
+  const lastShares = useRef(shares);
+  useEffect(() => {
+    if (shares !== lastShares.current) {
+      lastShares.current = shares;
+      setSharesDraft(shares > 0 ? String(shares) : '');
+    }
+  }, [shares]);
+
+  const handleSharesInput = (raw: string) => {
+    setSharesDraft(raw);
+    const n = Number(raw);
+    const next = raw.trim() === '' || !Number.isFinite(n) || n < 0 ? 0 : Math.floor(n);
+    lastShares.current = next;
+    onSharesChange(next);
+  };
+
+  // 金额 = 股数 × 股价（现价缺失时不计）
+  const positionAmount = shares > 0 && asset.currentPrice > 0 ? shares * asset.currentPrice : 0;
 
   return (
     <div
@@ -50,6 +79,27 @@ function AssetCard({ asset, isSelected, onSelect, onDelete }: Props) {
           onClick={(e) => { e.stopPropagation(); onDelete(); }}
           title="删除"
         >✕</button>
+      </div>
+
+      {/* 名称下方：股数（可录入）+ 金额（= 股数 × 股价） */}
+      <div className="card-shares" onClick={e => e.stopPropagation()}>
+        <label className="shares-field">
+          <span>股数</span>
+          <input
+            type="number"
+            min="0"
+            step="100"
+            inputMode="numeric"
+            placeholder="0"
+            value={sharesDraft}
+            onChange={e => handleSharesInput(e.target.value)}
+            title="输入持仓股数，金额 = 股数 × 当前股价"
+          />
+        </label>
+        <span className="shares-amount">
+          <span>金额</span>
+          <strong>{positionAmount > 0 ? formatAmount(positionAmount) : '—'}</strong>
+        </span>
       </div>
 
       <div className="card-price">

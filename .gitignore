@@ -21,3 +21,22 @@ Thumbs.db
 # Logs
 *.log
 npm-debug.log*
+
+# TypeScript 增量构建信息
+*.tsbuildinfo
+
+# 本地交易记录数据（个人数据，仅存本机）
+/data/
+
+# 本地调试/探针脚本（不入库）
+cdp_probe.mjs
+diag_*.mjs
+diag_*.js
+debug_kline.js
+dom_check.mjs
+em_probe.mjs
+fetch_local.js
+probe_local.mjs
+probe_out.txt
+test_eastmoney.js
+verify_local.mjs

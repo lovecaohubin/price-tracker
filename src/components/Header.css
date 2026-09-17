@@ -1,35 +1,74 @@
 .header {
-  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  position: relative;
+  overflow: hidden;
   color: #fff;
-  padding: 14px 20px;
+  padding: 16px 20px;
+  background: linear-gradient(120deg, #171a3a 0%, #2b2a6e 44%, #4338ca 100%);
+  box-shadow: 0 2px 18px rgba(23, 26, 58, 0.20);
+}
+
+/* 右上金色光晕：财富感来源之一 */
+.header::before {
+  content: '';
+  position: absolute;
+  top: -150px;
+  right: -90px;
+  width: 420px;
+  height: 420px;
+  background: radial-gradient(circle, rgba(240, 190, 90, 0.30), transparent 62%);
+  pointer-events: none;
+}
+
+/* 底部金色分隔线 */
+.header::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(240, 190, 90, 0.9), transparent);
+  pointer-events: none;
 }
 
 .header-content {
+  position: relative;
+  z-index: 1;
   max-width: 1300px;
   margin: 0 auto;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 16px;
 }
 
 .logo {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 
 .logo-icon {
   font-size: 24px;
+  filter: drop-shadow(0 2px 7px rgba(240, 190, 90, 0.55));
 }
 
 .logo h1 {
-  font-size: 18px;
+  font-size: 19px;
   font-weight: 700;
-  letter-spacing: -0.5px;
+  letter-spacing: 0.5px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
 }
 
 .subtitle {
   font-size: 12px;
-  opacity: 0.8;
+  color: #f3d79a;
+  opacity: 0.92;
   margin-left: 32px;
+}
+
+@media (max-width: 620px) {
+  .subtitle {
+    display: none;
+  }
 }

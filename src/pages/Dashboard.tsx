@@ -1,33 +1,101 @@
-import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Asset } from '../types';
 import { defaultSymbols, createPlaceholder } from '../data';
-import { fetchAssetData } from '../services/aStockApi';
+import { fetchAssetData, fetchQuotes } from '../services/aStockApi';
 import Header from '../components/Header';
 import AssetCard from '../components/AssetCard';
 import AddAssetForm from '../components/AddAssetForm';
 import PriceChart from '../components/PriceChart';
+import TradeAnalysis from '../components/TradeAnalysis';
 import '../App.css';
+
+// localStorage 持久化键
+const STORAGE_KEY_TRACKED = 'price-tracker:tracked-symbols';
+const STORAGE_KEY_SEED = 'price-tracker:seed-version';
+const STORAGE_KEY_SHARES = 'price-tracker:shares';
+// 修改 defaultSymbols 后递增此值，旧浏览器会自动重置为新默认列表
+const SEED_VERSION = 2;
+
+// 从 localStorage 读取已跟踪的代码列表；种子版本变更时重置为新默认值
+function loadTrackedSymbols(): string[] {
+  try {
+    if (localStorage.getItem(STORAGE_KEY_SEED) !== String(SEED_VERSION)) {
+      localStorage.setItem(STORAGE_KEY_TRACKED, JSON.stringify(defaultSymbols));
+      localStorage.setItem(STORAGE_KEY_SEED, String(SEED_VERSION));
+      return defaultSymbols;
+    }
+    const raw = localStorage.getItem(STORAGE_KEY_TRACKED);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr) && arr.every(s => typeof s === 'string')) {
+        return arr;
+      }
+    }
+  } catch {}
+  return defaultSymbols;
+}
+
+function persistTrackedSymbols(symbols: string[]) {
+  try { localStorage.setItem(STORAGE_KEY_TRACKED, JSON.stringify(symbols)); } catch {}
+}
+
+// 持仓股数：按代码存储，与行情数据解耦，刷新行情不会丢失
+function loadShares(): Record<string, number> {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_SHARES);
+    if (raw) {
+      const obj = JSON.parse(raw);
+      if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+        const out: Record<string, number> = {};
+        for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
+          if (typeof v === 'number' && Number.isFinite(v) && v > 0) out[k] = v;
+        }
+        return out;
+      }
+    }
+  } catch {}
+  return {};
+}
+
+function persistShares(shares: Record<string, number>) {
+  try { localStorage.setItem(STORAGE_KEY_SHARES, JSON.stringify(shares)); } catch {}
+}
 
 function Dashboard() {
   const [assets, setAssets] = useState<Asset[]>(() =>
-    defaultSymbols.map(createPlaceholder)
+    loadTrackedSymbols().map(createPlaceholder)
   );
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdate, setLastUpdate] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
-  const [filter, setFilter] = useState<'all' | 'stock' | 'etf'>('all');
+  const [activeSection, setActiveSection] = useState<'assets' | 'analysis'>('assets');
+  // 持仓股数：代码 -> 股数（独立于行情，避免刷新时被覆盖）
+  const [shares, setShares] = useState<Record<string, number>>(() => loadShares());
   const refreshTimer = useRef<ReturnType<typeof setInterval>>();
 
-  // 刷新所有资产数据
+  // 用 ref 持有最新资产列表，避免 refreshAll 依赖 assets 导致定时器被反复重建
+  const assetsRef = useRef<Asset[]>(assets);
+  useEffect(() => {
+    assetsRef.current = assets;
+  }, [assets]);
+
+  // 并发锁：定时刷新与手动刷新叠加会让请求翻倍，挤占浏览器连接导致 fetch 失败
+  const inFlight = useRef(false);
+
+  // 刷新所有资产数据：行情一次批量拉取，K 线走本地/服务端缓存
   const refreshAll = useCallback(async (symbols: string[], showLoading = true) => {
+    if (inFlight.current) return;
+    inFlight.current = true;
     if (showLoading) setLoading(true);
-    if (!showLoading) setRefreshing(true);
+    else setRefreshing(true);
 
     try {
+      // 多个资产合并成 1 次行情请求，而不是每个资产各发一次
+      const quotes = await fetchQuotes(symbols);
       const results = await Promise.allSettled(
-        symbols.map(s => fetchAssetData(s))
+        symbols.map(s => fetchAssetData(s, quotes.get(s)))
       );
 
       const updated: Asset[] = [];
@@ -39,7 +107,8 @@ function Dashboard() {
             id: symbols[i],
           } as Asset);
         } else {
-          updated.push({ ...assets.find(a => a.symbol === symbols[i]) || createPlaceholder(symbols[i]) });
+          const prev = assetsRef.current.find(a => a.symbol === symbols[i]);
+          updated.push({ ...(prev || createPlaceholder(symbols[i])) });
         }
       });
       setAssets(updated);
@@ -49,36 +118,40 @@ function Dashboard() {
     } catch (e) {
       console.error('刷新数据失败:', e);
     } finally {
+      inFlight.current = false;
       setLoading(false);
       setRefreshing(false);
     }
-  }, [assets]);
+  }, []);
 
   // 初始加载
   useEffect(() => {
     refreshAll(defaultSymbols);
-  }, []);
+  }, [refreshAll]);
 
-  // 每 10 秒自动刷新（仅交易时段 09:00-15:00）
+  // 每 10 秒自动刷新（仅交易时段 09:00-15:00，且仅在资产跟踪板块可见时）
   useEffect(() => {
     refreshTimer.current = setInterval(() => {
+      if (activeSection !== 'assets') return;
       const now = new Date();
       const hour = now.getHours();
       if (hour < 9 || hour >= 15) return;
-      const symbols = assets.map(a => a.symbol);
+      const symbols = assetsRef.current.map(a => a.symbol);
       if (symbols.length > 0) refreshAll(symbols, false);
     }, 10000);
     return () => clearInterval(refreshTimer.current);
-  }, [assets, refreshAll]);
+  }, [refreshAll, activeSection]);
 
-  const filteredAssets = useMemo(() => {
-    if (filter === 'all') return assets;
-    return assets.filter(a => a.type === filter);
-  }, [assets, filter]);
+  // 取刷新后的最新数据，避免图表停留在点击那一刻的旧快照
+  const selectedLive = selectedAsset
+    ? assets.find(a => a.id === selectedAsset.id) || selectedAsset
+    : null;
 
   const handleDelete = (id: string) => {
     setAssets(prev => prev.filter(a => a.id !== id));
     if (selectedAsset?.id === id) setSelectedAsset(null);
+    // 同步持久化：用 ref 读取最新列表避免闭包 stale
+    persistTrackedSymbols(assetsRef.current.filter(a => a.id !== id).map(a => a.symbol));
   };
 
   const handleAdd = async (symbol: string) => {
@@ -87,6 +160,7 @@ function Dashboard() {
 
     setShowAddForm(false);
     setAssets(prev => [...prev, createPlaceholder(symbol)]);
+    persistTrackedSymbols([...assetsRef.current.map(a => a.symbol), symbol]);
 
     // 异步加载新资产数据
     const data = await fetchAssetData(symbol);
@@ -97,108 +171,108 @@ function Dashboard() {
     }
   };
 
+  // 录入某只股票的持仓股数；置空或 0 视为清空
+  const handleSharesChange = useCallback((symbol: string, value: number) => {
+    setShares(prev => {
+      const next = { ...prev };
+      if (value > 0) next[symbol] = value;
+      else delete next[symbol];
+      persistShares(next);
+      return next;
+    });
+  }, []);
+
   const handleManualRefresh = () => {
     const symbols = assets.map(a => a.symbol);
     if (symbols.length > 0) refreshAll(symbols, false);
   };
-
-  const totalAssets = filteredAssets.length;
-  const nearHigh = filteredAssets.filter(a => a.high52Week > 0 && a.currentPrice >= a.high52Week * 0.95).length;
-  const avgChange = filteredAssets.length > 0
-    ? Math.round(filteredAssets.reduce((s, a) => s + a.changePercent, 0) / filteredAssets.length * 100) / 100
-    : 0;
 
   return (
     <div className="app">
       <Header />
 
       <main className="main">
-        <div className="stats-bar">
-          <div className="stat-item">
-            <span className="stat-label">跟踪资产</span>
-            <span className="stat-value">{totalAssets}</span>
-          </div>
-          <div className="stat-item">
-            <span className="stat-label">接近新高</span>
-            <span className="stat-value highlight">{nearHigh}</span>
-          </div>
-          <div className="stat-item">
-            <span className="stat-label">平均涨跌</span>
-            <span className={`stat-value ${avgChange >= 0 ? 'up' : 'down'}`}>
-              {avgChange >= 0 ? '+' : ''}{avgChange}%
-            </span>
-          </div>
-        </div>
-
-        <div className="toolbar">
-          <div className="toolbar-left">
-            <div className="filter-tabs">
-              {(['all', 'stock'] as const).map(t => (
-                <button
-                  key={t}
-                  className={`filter-tab ${filter === t ? 'active' : ''}`}
-                  onClick={() => setFilter(t)}
-                >
-                  {t === 'all' ? '全部' : 'A股'}
-                </button>
-              ))}
-            </div>
-            {lastUpdate && (
-              <span className="update-time">
-                {refreshing ? '刷新中...' : `更新于 ${lastUpdate}`}
-                <button className="btn-refresh" onClick={handleManualRefresh} title="手动刷新">↻</button>
-              </span>
-            )}
-          </div>
-          <button className="btn-add" onClick={() => setShowAddForm(true)}>
-            + 添加跟踪
+        <div className="section-tabs">
+          <button
+            className={`section-tab ${activeSection === 'assets' ? 'active' : ''}`}
+            onClick={() => setActiveSection('assets')}
+          >
+            资产跟踪
+          </button>
+          <button
+            className={`section-tab ${activeSection === 'analysis' ? 'active' : ''}`}
+            onClick={() => setActiveSection('analysis')}
+          >
+            数据分析
           </button>
         </div>
 
-        {loading ? (
-          <div className="loading-state">
-            <div className="spinner" />
-            <p>正在加载A股实时数据...</p>
-          </div>
+        {activeSection === 'analysis' ? (
+          <TradeAnalysis />
         ) : (
           <>
-            <div className="asset-grid">
-              {filteredAssets.map(asset => (
-                <AssetCard
-                  key={asset.id}
-                  asset={asset}
-                  isSelected={selectedAsset?.id === asset.id}
-                  onSelect={() => setSelectedAsset(
-                    selectedAsset?.id === asset.id ? null : asset
-                  )}
-                  onDelete={() => handleDelete(asset.id)}
-                />
-              ))}
-              {filteredAssets.length === 0 && (
-                <div className="empty-state">
-                  <p>暂无跟踪资产，点击"+ 添加跟踪"开始</p>
-                </div>
-              )}
+            <div className="toolbar">
+              <div className="toolbar-left">
+                {lastUpdate && (
+                  <span className="update-time">
+                    {refreshing ? '刷新中...' : `更新于 ${lastUpdate}`}
+                    <button className="btn-refresh" onClick={handleManualRefresh} title="手动刷新">↻</button>
+                  </span>
+                )}
+              </div>
+              <button className="btn-add" onClick={() => setShowAddForm(true)}>
+                + 添加跟踪
+              </button>
             </div>
 
-            {selectedAsset && (
-              <div className="chart-section">
-                <div className="chart-header">
-                  <h2>{selectedAsset.name} ({selectedAsset.symbol}) 近30天走势</h2>
-                  <button className="btn-close" onClick={() => setSelectedAsset(null)}>✕</button>
-                </div>
-                <PriceChart asset={selectedAsset} />
+            {loading ? (
+              <div className="loading-state">
+                <div className="spinner" />
+                <p>正在加载实时行情...</p>
               </div>
+            ) : (
+              <>
+                <div className="asset-grid">
+                  {assets.map(asset => (
+                    <AssetCard
+                      key={asset.id}
+                      asset={asset}
+                      isSelected={selectedAsset?.id === asset.id}
+                      shares={shares[asset.symbol] ?? 0}
+                      onSharesChange={v => handleSharesChange(asset.symbol, v)}
+                      onSelect={() => setSelectedAsset(
+                        selectedAsset?.id === asset.id ? null : asset
+                      )}
+                      onDelete={() => handleDelete(asset.id)}
+                    />
+                  ))}
+                  {assets.length === 0 && (
+                    <div className="empty-state">
+                      <p>暂无跟踪资产，点击"+ 添加跟踪"开始</p>
+                    </div>
+                  )}
+                </div>
+
+                {selectedLive && (
+                  <div className="chart-section">
+                    <div className="chart-header">
+                      <h2>{selectedLive.name} ({selectedLive.symbol}) 近30天走势</h2>
+                      <button className="btn-close" onClick={() => setSelectedAsset(null)}>✕</button>
+                    </div>
+                    <PriceChart key={selectedLive.id} asset={selectedLive} />
+                  </div>
+                )}
+              </>
+            )}
+
+            {showAddForm && (
+              <AddAssetForm
+                existingSymbols={assets.map(a => a.symbol)}
+                onAdd={handleAdd}
+                onClose={() => setShowAddForm(false)}
+              />
             )}
           </>
-        )}
-
-        {showAddForm && (
-          <AddAssetForm
-            existingSymbols={assets.map(a => a.symbol)}
-            onAdd={handleAdd}
-            onClose={() => setShowAddForm(false)}
-          />
         )}
       </main>
     </div>

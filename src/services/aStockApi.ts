@@ -60,6 +60,40 @@ export async function fetchQuotes(symbols: string[]): Promise<Map<string, QuoteR
   return result;
 }
 
+// K 线本地缓存：轮询时不必重复拉取全量历史数据
+// 周线(每资产约 110KB)历史数据几乎不变，只拉一次；日线 60 秒内复用
+const weekRowCache = new Map<string, string[][]>();
+const dayRowCache = new Map<string, { rows: string[][]; at: number }>();
+const DAY_ROW_TTL = 60 * 1000;
+
+// 拉取并解析 K 线（东方财富每行为 CSV: 日期,开,收,高,低,量,额,振幅,涨跌幅,涨跌额,换手率）
+async function loadKlineRows(symbol: string, period: 'day' | 'week'): Promise<string[][] | null> {
+  if (period === 'week') {
+    const hit = weekRowCache.get(symbol);
+    if (hit) return hit;
+  } else {
+    const hit = dayRowCache.get(symbol);
+    if (hit && Date.now() - hit.at < DAY_ROW_TTL) return hit.rows;
+  }
+
+  try {
+    const resp = await fetch(`/api/kline?symbol=${symbol}&period=${period}`);
+    if (!resp.ok) return null;
+
+    const json = await resp.json();
+    const klines: unknown = json?.data?.klines;
+    if (!Array.isArray(klines)) return null;
+
+    const rows = (klines as string[]).map(line => String(line).split(','));
+    if (period === 'week') weekRowCache.set(symbol, rows);
+    else dayRowCache.set(symbol, { rows, at: Date.now() });
+    return rows;
+  } catch (e) {
+    console.error(`[${symbol}] ${period} K线请求失败:`, e);
+    return null;
+  }
+}
+
 // 从 K线 JSON 解析最高价
 function calcMaxHigh(rawKlines: string[][]): number {
   let max = 0;
@@ -91,70 +125,67 @@ function extractPrices(rawKlines: string[][], count: number): PricePoint[] {
 }
 
 // 完整获取一只股票的数据
-// 日线：算 52 周新高 + 走势图；周线：算历史最高/最低（2000 年起，覆盖约 27 年）
-export async function fetchAssetData(symbol: string): Promise<Partial<Asset> | null> {
-  const quotes = await fetchQuotes([symbol]);
-  const quote = quotes.get(symbol);
+// 日线(近300个交易日)：算 52 周新高(真实价) + 30天走势图；周线(不复权，2000年以来)：算历史最高/最低
+// quote 可由调用方批量获取后传入，避免每个资产单独发一次行情请求
+export async function fetchAssetData(symbol: string, externalQuote?: QuoteResult): Promise<Partial<Asset> | null> {
+  let quote = externalQuote;
+  if (!quote) {
+    const quotes = await fetchQuotes([symbol]);
+    quote = quotes.get(symbol);
+  }
   if (!quote) return null;
 
+  const q = quote;
   const code = symbol.toLowerCase();
-  let high52Week = quote.high;
-  let allTimeHigh = quote.high;
-  let lowSince2000 = quote.low;
+  let high52Week = q.high;
+  let allTimeHigh = q.high;
+  let lowSince2000 = q.low;
   const recentKlines: PricePoint[] = [];
 
   try {
-    // 日线：52周新高 + 30天走势图
-    const dayResp = await fetch(`/api/kline?symbol=${code}&period=day`);
-    if (dayResp.ok) {
-      const json = await dayResp.json();
-      const stockData = json.data?.[code];
-      if (json.code === 0 && stockData && typeof stockData === 'object') {
-        const raw: string[][] = stockData.qfqday || stockData.day || [];
-        console.log(`[${symbol}] 日线 ${raw.length} 条`);
+    // 日线(不复权)：52周新高(近250个交易日) + 近30天走势图
+    const dayRows = await loadKlineRows(code, 'day');
+    if (dayRows) {
+      console.log(`[${symbol}] 日线 ${dayRows.length} 条`);
 
-        const oneYearKlines = raw.slice(-250);
-        high52Week = calcMaxHigh(oneYearKlines);
-        if (quote.high > high52Week) high52Week = quote.high;
+      const oneYearKlines = dayRows.slice(-250);
+      high52Week = calcMaxHigh(oneYearKlines);
+      if (q.high > high52Week) high52Week = q.high;
 
-        recentKlines.push(...extractPrices(raw, 30));
+      recentKlines.push(...extractPrices(dayRows, 30));
+    }
+
+    // 周线(不复权)：历史最高 + 2000年以来历史最低
+    const weekRows = await loadKlineRows(code, 'week');
+    if (weekRows) {
+      console.log(`[${symbol}] 周线 ${weekRows.length} 条`);
+
+      // 历史最高：取全部可得数据的最高价
+      allTimeHigh = calcMaxHigh(weekRows);
+      if (q.high > allTimeHigh) allTimeHigh = q.high;
+
+      // 2000 年以来历史最低（过滤 2000-01-01 之前的周K，与当日最低取较小值）
+      const since2000 = weekRows.filter(k => (k[0] || '') >= '2000-01-01');
+      const weekMin = calcMinLow(since2000.length > 0 ? since2000 : weekRows);
+      if (weekMin > 0) {
+        lowSince2000 = lowSince2000 > 0 ? Math.min(lowSince2000, weekMin) : weekMin;
       }
     }
 
-    // 周线：历史最高/最低（从 2000 年起，覆盖约 27 年）
-    const weekResp = await fetch(`/api/kline?symbol=${code}&period=week`);
-    if (weekResp.ok) {
-      const json = await weekResp.json();
-      const stockData = json.data?.[code];
-      if (json.code === 0 && stockData && typeof stockData === 'object') {
-        const raw: string[][] = stockData.week || stockData.qfqweek || [];
-        console.log(`[${symbol}] 周线 ${raw.length} 条`);
-
-        allTimeHigh = calcMaxHigh(raw);
-        if (quote.high > allTimeHigh) allTimeHigh = quote.high;
-
-        // 2000 年以来历史最低（与当日最低取较小值）
-        const weekMin = calcMinLow(raw);
-        if (weekMin > 0) {
-          lowSince2000 = lowSince2000 > 0 ? Math.min(lowSince2000, weekMin) : weekMin;
-        }
-      }
-    }
-
-    console.log(`[${symbol}] 今日:${quote.high}  52周新高:${high52Week}  历史最高:${allTimeHigh}  历史最低:${lowSince2000}  当前价:${quote.currentPrice}`);
+    console.log(`[${symbol}] 今日:${q.high}  52周新高:${high52Week}  历史最高:${allTimeHigh}  历史最低:${lowSince2000}  当前价:${q.currentPrice}`);
   } catch (e) {
     console.error(`[${symbol}] K线请求失败:`, e);
   }
 
   return {
-    name: quote.name,
+    name: q.name,
     symbol,
-    currentPrice: quote.currentPrice,
-    high52Week: high52Week || quote.high,
-    allTimeHigh: allTimeHigh || quote.high,
-    lowSince2000: lowSince2000 || quote.low,
-    changePercent: Math.round(quote.changePercent * 100) / 100,
+    currentPrice: q.currentPrice,
+    high52Week: high52Week || q.high,
+    allTimeHigh: allTimeHigh || q.high,
+    lowSince2000: lowSince2000 || q.low,
+    changePercent: Math.round(q.changePercent * 100) / 100,
     priceHistory: recentKlines,
-    turnoverRate: Math.round(quote.turnoverRate * 100) / 100,
+    turnoverRate: Math.round(q.turnoverRate * 100) / 100,
   };
 }

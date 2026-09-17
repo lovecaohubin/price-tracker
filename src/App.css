@@ -8,48 +8,43 @@
   max-width: 1300px;
   width: 100%;
   margin: 0 auto;
-  padding: 16px 16px 32px;
+  padding: 20px 20px 48px;
 }
 
-/* 统计栏 — 紧凑横排 */
-.stats-bar {
+/* 主板块切换：分段控件 */
+.section-tabs {
   display: flex;
-  gap: 12px;
-  margin-bottom: 12px;
+  width: fit-content;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 16px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--sh-1);
 }
 
-.stat-item {
-  flex: 1;
-  background: #fff;
-  border-radius: 10px;
-  padding: 12px;
-  text-align: center;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+.section-tab {
+  padding: 8px 22px;
+  border: none;
+  background: transparent;
+  border-radius: 9px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: background 0.18s, color 0.18s, box-shadow 0.18s;
 }
 
-.stat-label {
-  display: block;
-  font-size: 12px;
-  color: #6b7280;
-  margin-bottom: 2px;
+.section-tab:hover {
+  background: #f3f5fa;
+  color: var(--text-1);
 }
 
-.stat-value {
-  font-size: 22px;
-  font-weight: 700;
-  color: #1f2937;
-}
-
-.stat-value.highlight {
-  color: #f59e0b;
-}
-
-.stat-value.up {
-  color: #ef4444;
-}
-
-.stat-value.down {
-  color: #10b981;
+.section-tab.active {
+  color: #fff;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.28);
 }
 
 /* 工具栏 */
@@ -57,34 +52,9 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
   flex-wrap: wrap;
-  gap: 8px;
-}
-
-.filter-tabs {
-  display: flex;
-  background: #e5e7eb;
-  border-radius: 8px;
-  padding: 3px;
-}
-
-.filter-tab {
-  padding: 6px 16px;
-  border: none;
-  background: transparent;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 500;
-  color: #4b5563;
-  transition: all 0.2s;
-}
-
-.filter-tab.active {
-  background: #fff;
-  color: #6366f1;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  gap: 10px;
 }
 
 .toolbar-left {
@@ -95,103 +65,137 @@
 }
 
 .update-time {
-  font-size: 12px;
-  font-weight: 600;
-  color: #6366f1;
-  background: #eef2ff;
-  padding: 4px 10px;
-  border-radius: 6px;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary-dark);
+  background: var(--primary-soft);
+  border-radius: 999px;
 }
 
 .btn-refresh {
-  background: none;
-  border: 1px solid #e5e7eb;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 14px;
-  color: #6366f1;
-  padding: 1px 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  font-size: 13px;
   line-height: 1;
+  color: var(--primary-dark);
+  background: #fff;
+  border: 1px solid #dfe4fb;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.18s;
 }
 
 .btn-refresh:hover {
-  background: #eef2ff;
-  border-color: #6366f1;
+  color: #fff;
+  background: var(--primary);
+  border-color: var(--primary);
+  transform: rotate(90deg);
 }
 
 .btn-add {
-  padding: 8px 20px;
-  background: #6366f1;
-  color: #fff;
-  border: none;
-  border-radius: 8px;
+  padding: 9px 20px;
   font-size: 13px;
   font-weight: 600;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
   cursor: pointer;
-  transition: all 0.2s;
+  background: linear-gradient(135deg, var(--primary) 0%, #7c3aed 100%);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.28);
+  transition: transform 0.18s, box-shadow 0.18s;
 }
 
 .btn-add:hover {
-  background: #4f46e5;
+  transform: translateY(-1px);
+  box-shadow: 0 7px 18px rgba(99, 102, 241, 0.36);
+}
+
+.btn-add:active {
+  transform: translateY(0);
 }
 
 /* 卡片网格 — 固定 3 列 */
 .asset-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
+  gap: 16px;
   margin-bottom: 24px;
 }
 
 /* 图表区域 */
 .chart-section {
-  background: #fff;
-  border-radius: 14px;
-  padding: 20px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  position: relative;
+  overflow: hidden;
+  background: var(--surface);
+  border-radius: var(--r-lg);
+  padding: 20px 22px;
+  box-shadow: var(--sh-2);
   margin-bottom: 20px;
+}
+
+/* 顶部渐变细线，与页头呼应 */
+.chart-section::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--primary), #a78bfa 55%, var(--gold));
 }
 
 .chart-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  gap: 12px;
+  margin-bottom: 14px;
 }
 
 .chart-header h2 {
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 700;
+  color: var(--text-1);
 }
 
 .btn-close {
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   border: none;
   background: #f3f4f6;
   border-radius: 50%;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 13px;
   color: #6b7280;
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.18s;
 }
 
 .btn-close:hover {
-  background: #e5e7eb;
-  color: #1f2937;
+  background: #fee2e2;
+  color: #ef4444;
 }
 
 .empty-state {
   grid-column: 1 / -1;
   text-align: center;
   padding: 40px 20px;
-  color: #9ca3af;
+  color: var(--text-3);
   font-size: 14px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-lg);
 }
 
 .loading-state {
@@ -199,15 +203,16 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 60px 20px;
-  gap: 12px;
+  padding: 70px 20px;
+  gap: 14px;
 }
 
 .spinner {
-  width: 36px;
-  height: 36px;
-  border: 3px solid #e5e7eb;
-  border-top-color: #6366f1;
+  width: 38px;
+  height: 38px;
+  border: 3px solid #e3e7f3;
+  border-top-color: var(--primary);
+  border-right-color: var(--gold);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -218,7 +223,7 @@
 
 .loading-state p {
   font-size: 13px;
-  color: #9ca3af;
+  color: var(--text-3);
 }
 
 /* 小屏回退 2 列 */
@@ -229,7 +234,12 @@
 }
 
 @media (max-width: 560px) {
+  .main {
+    padding: 16px 14px 40px;
+  }
+
   .asset-grid {
     grid-template-columns: 1fr;
+    gap: 12px;
   }
 }

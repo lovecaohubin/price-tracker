@@ -62,6 +62,9 @@ function PriceChart({ asset }: Props) {
           <Tooltip
             formatter={(value: number) => [value.toFixed(2), '价格']}
             labelFormatter={(label: string) => `日期: ${label}`}
+            // 关闭动画：Tooltip 动画期间会访问尚未挂载的容器 DOM，导致 getBoundingClientRect 空指针
+            isAnimationActive={false}
+            wrapperStyle={{ outline: 'none' }}
           />
           <ReferenceLine
             y={asset.high52Week}

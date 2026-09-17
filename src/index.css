@@ -4,14 +4,100 @@
   box-sizing: border-box;
 }
 
+/* ===== 全局设计变量：统一色板 / 圆角 / 阴影 / 焦点环 ===== */
+:root {
+  --bg-base: #f4f7fc;
+  --surface: #ffffff;
+
+  --text-1: #1b2333;
+  --text-2: #4b5563;
+  --text-3: #8a94a6;
+
+  --line: #eef1f6;
+  --line-strong: #e2e8f2;
+
+  --primary: #6366f1;
+  --primary-dark: #4f46e5;
+  --primary-soft: #eef2ff;
+
+  --gold: #d99a2b;
+  --gold-deep: #b7791f;
+  --gold-soft: #fff8e6;
+  --gold-line: #f2d79b;
+
+  --up: #ef4444;
+  --down: #10b981;
+
+  --r-xs: 6px;
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+
+  --sh-1: 0 1px 2px rgba(20, 30, 55, 0.04), 0 2px 6px rgba(20, 30, 55, 0.05);
+  --sh-2: 0 4px 14px rgba(20, 30, 55, 0.07), 0 1px 3px rgba(20, 30, 55, 0.05);
+  --sh-3: 0 18px 50px rgba(20, 30, 55, 0.16);
+
+  --ring: 0 0 0 3px rgba(99, 102, 241, 0.14);
+}
+
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
-    'Noto Sans SC', sans-serif;
-  background: #f1f5f9;
-  color: #1f2937;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', 'Noto Sans SC', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  color: var(--text-1);
   min-height: 100vh;
+  background-color: var(--bg-base);
+  background-image:
+    radial-gradient(1100px 520px at 6% -10%, rgba(99, 102, 241, 0.10), transparent 62%),
+    radial-gradient(900px 460px at 100% -6%, rgba(217, 154, 43, 0.13), transparent 58%);
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 #root {
   min-height: 100vh;
+}
+
+button,
+input,
+textarea,
+select {
+  font-family: inherit;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible {
+  outline: 2px solid rgba(99, 102, 241, 0.55);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: rgba(217, 154, 43, 0.28);
+}
+
+/* 细滚动条，减少页面杂色 */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d5dbe6;
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #bdc5d4;
+  border: 3px solid transparent;
+  background-clip: content-box;
 }
