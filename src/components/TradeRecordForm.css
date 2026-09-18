@@ -217,6 +217,233 @@
   color: var(--text-1);
 }
 
+/* ===== 次日仓位建议面板 ===== */
+.advice-panel {
+  --advice-accent: #94a3b8;
+  border: 1px solid var(--line-strong);
+  border-left: 3px solid var(--advice-accent);
+  border-radius: 12px;
+  background: #f8fafc;
+  padding: 12px 14px;
+  margin-bottom: 18px;
+}
+
+/* 档位配色沿用全站红涨绿跌：越激进越红，越保守越绿 */
+.advice-panel.advice-attack,
+.advice-panel.advice-bullish {
+  --advice-accent: var(--up);
+  background: #fff8f8;
+  border-color: #fbdcdc;
+}
+
+.advice-panel.advice-neutral {
+  --advice-accent: var(--primary);
+  background: var(--primary-soft);
+  border-color: #dbe0fb;
+}
+
+.advice-panel.advice-bearish,
+.advice-panel.advice-defensive {
+  --advice-accent: var(--down);
+  background: #f4fdfa;
+  border-color: #cdeee2;
+}
+
+/* 数据不足：不给方向就不该有倾向性配色，整体降级为中性灰 */
+.advice-panel.advice-insufficient {
+  --advice-accent: #94a3b8;
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+.advice-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.advice-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: var(--text-2);
+}
+
+.advice-tag {
+  padding: 1px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--advice-accent);
+}
+
+.advice-score {
+  font-size: 11px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 置信度徽标：因子覆盖率越高越"没话说"，越低越显眼，避免低置信度被当成确定结论 */
+.advice-conf {
+  padding: 1px 7px;
+  border-radius: 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-2);
+  background: rgba(15, 23, 42, 0.06);
+  white-space: nowrap;
+  cursor: help;
+}
+
+.advice-conf.conf-medium {
+  color: var(--primary-dark);
+  background: var(--primary-soft);
+}
+
+.advice-conf.conf-low {
+  color: var(--gold-deep);
+  background: var(--gold-soft);
+  border: 1px solid var(--gold-line);
+}
+
+.advice-conf.conf-insufficient {
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+}
+
+/* 建议仓位区间：面板里的视觉重点 */
+.advice-range {
+  margin-left: auto;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--advice-accent);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 未给出建议时不能用大号字误导成"结论" */
+.advice-range.na {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+
+.advice-bar {
+  height: 6px;
+  border-radius: 4px;
+  background: rgba(15, 23, 42, 0.07);
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.advice-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #cbd5e1 0%, var(--advice-accent) 100%);
+  transition: width 0.25s;
+}
+
+.advice-action {
+  margin: 0 0 8px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-1);
+}
+
+.advice-reasons {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.advice-reasons li {
+  display: flex;
+  gap: 7px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-2);
+}
+
+.advice-reasons li b {
+  flex: none;
+  min-width: 34px;
+  font-weight: 700;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.advice-reasons li.up b {
+  color: var(--up);
+}
+
+.advice-reasons li.down b {
+  color: var(--down);
+}
+
+.advice-mean {
+  margin: 0 0 6px;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+
+.advice-note {
+  margin: 0 0 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(99, 102, 241, 0.06);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+/* ===== 大盘数据（接口）操作条 ===== */
+.market-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.market-note {
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+
+.market-err {
+  font-size: 11.5px;
+  color: var(--up);
+}
+
+/* 行情降级提示：用的不是实时数据时必须显眼 */
+.market-warn {
+  font-size: 11.5px;
+  color: var(--gold-deep);
+  background: var(--gold-soft);
+  border: 1px solid var(--gold-line);
+  border-radius: 7px;
+  padding: 2px 8px;
+}
+
+.market-facts {
+  width: 100%;
+  font-size: 11.5px;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.advice-missing {
+  margin: 8px 0 0;
+  font-size: 11.5px;
+  color: var(--gold-deep);
+}
+
 @media (max-width: 760px) {
   .form-grid {
     grid-template-columns: repeat(2, 1fr);

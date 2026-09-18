@@ -6,6 +6,10 @@ import { TradeRecord, TradeRecordField } from '../types';
 import { fetchTradeRecords, saveTradeRecords } from '../services/tradeLogApi';
 import { downloadTradeCsv } from '../services/tradeExport';
 import TradeRecordForm from './TradeRecordForm';
+import { buildPositionAdvice, PositionAdvice } from '../services/positionAdvice';
+import { buildAdviceInput } from '../services/adviceInput';
+import { fetchMarketSnapshot, MarketHistoryPoint } from '../services/market';
+import { runAdviceBacktest, BucketStat } from '../services/adviceBacktest';
 import './TradeAnalysis.css';
 
 type RangeKey = '30' | '90' | '365' | 'all';
@@ -51,6 +55,60 @@ const fmtPctSigned = (v: number | null | undefined, digits = 2) =>
 const pnlClass = (v: number | null | undefined) =>
   v == null || v === 0 ? '' : v > 0 ? 'up' : 'down';
 
+// 建议仓位单元格：区间文本 + 悬浮说明（评分与逐项依据）
+// 置信度不足时模型本来就没有表态，这里显示「数据不足」而不是硬凑一个区间
+const adviceRangeText = (adv?: PositionAdvice) => {
+  if (!adv) return '—';
+  return adv.adviceAvailable
+    ? `${Math.round(adv.minPosition * 100)}~${Math.round(adv.maxPosition * 100)}%`
+    : '数据不足';
+};
+
+// 单元格配色：未给出建议时用中性灰，避免"没结论"被涂成激进/防守色
+const adviceCellClass = (adv?: PositionAdvice) => {
+  if (!adv) return '';
+  return adv.adviceAvailable ? `advice-${adv.level}` : 'advice-insufficient';
+};
+
+const adviceTip = (adv?: PositionAdvice) => {
+  if (!adv) return '数据不足，无法给出建议';
+  const conf = `置信度${adv.confidenceLabel}（因子覆盖 ${Math.round(adv.coverage * 100)}%）`;
+  if (!adv.adviceAvailable) return `${conf}\n${adv.action}`;
+  return `${adv.levelLabel} · ${adv.score} 分 · ${conf}\n${adv.action}\n${adv.reasons
+    .map(r => `${r.delta > 0 ? '+' : ''}${r.delta} ${r.text}`)
+    .join('\n')}`;
+};
+
+// 回测结果表格：核心指标是「跌超 1%」概率——评分越低该概率越高，说明模型能识别尾部风险
+const BucketTable = ({ list, showPosition = false }: { list: BucketStat[]; showPosition?: boolean }) => (
+  <table className="bt-table">
+    <thead>
+      <tr>
+        <th>分组</th>
+        {showPosition && <th>建议仓位</th>}
+        <th>样本</th>
+        <th title="次日上证指数涨跌的平均值">平均次日</th>
+        <th title="次日上证指数上涨的概率">上涨概率</th>
+        <th title="次日跌超 1% 的概率，仓位管理要规避的尾部风险">跌超1%</th>
+        <th title="其后 3 个交易日的累计涨跌">平均3日</th>
+      </tr>
+    </thead>
+    <tbody>
+      {list.map(b => (
+        <tr key={b.label}>
+          <td>{b.label}</td>
+          {showPosition && <td>{b.positionMid != null ? `${Math.round(b.positionMid * 100)}%` : '—'}</td>}
+          <td>{b.samples}</td>
+          <td className={pnlClass(b.avgNext1)}>{fmtPctSigned(b.avgNext1)}</td>
+          <td>{fmtPct(b.upRate, 1)}</td>
+          <td className={b.dangerRate >= 0.12 ? 'down' : ''}>{fmtPct(b.dangerRate, 1)}</td>
+          <td className={pnlClass(b.avgNext3)}>{fmtPctSigned(b.avgNext3)}</td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
+);
+
 const toDateStr = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
@@ -74,6 +132,28 @@ function TradeAnalysis() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<TradeRecord | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  // 上证指数历史走势：既用于建议模型的均线因子，也用于模型验证回测
+  const [history, setHistory] = useState<MarketHistoryPoint[]>([]);
+  const [marketError, setMarketError] = useState('');
+  const [marketLoading, setMarketLoading] = useState(false);
+  // 行情降级状态：接口失败时用的是本地缓存，必须让用户知道这不是实时数据
+  const [marketDegraded, setMarketDegraded] = useState<string>('');
+
+  const loadMarket = useCallback(async () => {
+    setMarketLoading(true);
+    try {
+      const snap = await fetchMarketSnapshot(700);
+      setHistory(snap.history);
+      setMarketError('');
+      setMarketDegraded(snap.stale ? snap.note ?? '行情接口不可用，使用的是本地缓存数据' : '');
+    } catch (e) {
+      setMarketError(e instanceof Error ? e.message : '大盘行情获取失败');
+    } finally {
+      setMarketLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadMarket(); }, [loadMarket]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -217,26 +297,32 @@ function TradeAnalysis() {
     return map;
   }, [records]);
 
+  // 每条记录对应的「次日仓位建议」：与回测、录入表单共用 buildAdviceInput 的同一套口径
+  const adviceMap = useMemo(() => {
+    const map = new Map<string, PositionAdvice>();
+    records.forEach((r, i) => {
+      map.set(r.id, buildPositionAdvice(buildAdviceInput(records, i, history)));
+    });
+    return map;
+  }, [records, history]);
+
+  // 模型验证：用上证指数真实走势检验建议究竟提供了什么信息
+  const backtest = useMemo(
+    () => (history.length >= 20 ? runAdviceBacktest(records, history) : null),
+    [records, history],
+  );
+
+  // 方向预测力的上限：取各因子次日相关系数的最大绝对值，用于结论描述
+  const maxAbsCorr = useMemo(
+    () => (backtest ? Math.max(0, ...backtest.correlations.map(c => Math.abs(c.n1 ?? 0))) : 0),
+    [backtest],
+  );
+
   const totalPages = Math.max(1, Math.ceil(listDesc.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
   const pageList = listDesc.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
   useEffect(() => { setPage(1); }, [keyword]);
-
-  // 录入表单用于自动推算派生字段的「上一日」基准：当前金额、总金额、成交量
-  const prevSnapshot = useMemo(() => {
-    if (!formOpen) {
-      return { prevCurrentAmount: null, prevTotalAmount: null, prevTurnover: null };
-    }
-    const baseDate = editing?.date ?? '9999-12-31';
-    const before = records.filter(r => r.date < baseDate);
-    const last = before[before.length - 1];
-    return {
-      prevCurrentAmount: last?.currentAmount ?? null,
-      prevTotalAmount: last?.totalAmount ?? null,
-      prevTurnover: last?.turnover ?? null,
-    };
-  }, [formOpen, editing, records]);
 
   // 导出当前筛选结果（未筛选即全部），按日期升序输出
   const handleExport = () => {
@@ -461,6 +547,7 @@ function TradeAnalysis() {
                 <th>累计盈亏</th>
                 <th>盈亏比</th>
                 <th>仓位</th>
+                <th title="按当日大盘、主力资金、量价配合与账户状态推导的次日目标仓位区间（悬浮查看评分依据）">建议仓位</th>
                 <th>成交量</th>
                 <th>涨幅</th>
                 <th>主力资金</th>
@@ -481,6 +568,12 @@ function TradeAnalysis() {
                     <td className={pnlClass(r.cumPnl)}>{fmtSigned(r.cumPnl)}</td>
                     <td className={pnlClass(r.cumPnlRate)}>{fmtPctSigned(r.cumPnlRate)}</td>
                     <td>{fmtPct(r.positionRate, 1)}</td>
+                    <td
+                      className={`col-advice ${adviceCellClass(adviceMap.get(r.id))}`}
+                      title={adviceTip(adviceMap.get(r.id))}
+                    >
+                      {adviceRangeText(adviceMap.get(r.id))}
+                    </td>
                     <td>{fmtMoney(r.turnover)}</td>
                     <td className={pnlClass(r.changePct)}>{fmtPctSigned(r.changePct)}</td>
                     <td className={pnlClass(r.mainCapital)}>{fmtSigned(r.mainCapital)}</td>
@@ -502,7 +595,7 @@ function TradeAnalysis() {
                   </tr>
                   {expandedId === r.id && (
                     <tr className="row-detail">
-                      <td colSpan={11}>
+                      <td colSpan={12}>
                         <div className="detail-grid">
                           <div className="detail-item">
                             <span className="detail-label">次日交易计划</span>
@@ -538,7 +631,7 @@ function TradeAnalysis() {
               ))}
               {pageList.length === 0 && (
                 <tr>
-                  <td colSpan={11} className="table-empty">没有匹配的记录</td>
+                  <td colSpan={12} className="table-empty">没有匹配的记录</td>
                 </tr>
               )}
             </tbody>
@@ -553,13 +646,87 @@ function TradeAnalysis() {
         )}
       </div>
 
+      <div className="backtest-section">
+        <div className="backtest-head">
+          <h2>模型验证 · 次日仓位建议</h2>
+          <span className="backtest-sub">
+            {backtest
+              ? `用 ${backtest.samples} 条记录（${backtest.from} ~ ${backtest.to}）与上证指数真实走势回测${
+                  backtest.suppressed ? `，另有 ${backtest.suppressed} 条因置信度不足未给出建议、未计入` : ''
+                }`
+              : marketLoading
+                ? '正在获取大盘行情…'
+                : '大盘行情不可用，回测暂不可用'}
+          </span>
+        </div>
+
+        {marketDegraded && (
+          <div className="market-degraded">
+            <span>{marketDegraded}</span>
+            <button onClick={loadMarket}>刷新</button>
+          </div>
+        )}
+
+        {marketError && (
+          <div className="analysis-error">
+            <span>{marketError}</span>
+            <button onClick={loadMarket}>重试</button>
+          </div>
+        )}
+
+        {backtest && (
+          <>
+            <p className="backtest-note">
+              相关性检验：评分与「次日涨跌方向」的相关系数最高仅
+              <b> {maxAbsCorr.toFixed(2)} </b>
+              （一般需 &gt;0.3 才有参考价值），所以<b>这个模型不能预测明天涨跌</b>；
+              稳定成立的是风险信号——评分越低，次日「跌超 1%」的概率越高（最低分位{' '}
+              {fmtPct(backtest.quintiles[0]?.dangerRate ?? 0, 1)} vs 最高分位{' '}
+              {fmtPct(backtest.quintiles[backtest.quintiles.length - 1]?.dangerRate ?? 0, 1)}）。
+              它的用途是<b>约束风险敞口</b>：让仓位随市场与账户状态自动收缩，而不是代替判断方向。
+              另外，因子覆盖不足时模型会选择<b>不出建议</b>——采样区间里有
+              <b> {backtest.suppressed} </b>条属于这种情况。
+            </p>
+
+            <div className="backtest-grid">
+              <div className="backtest-card">
+                <h3>各档位（含账户盈亏与杠杆因子）</h3>
+                <BucketTable list={backtest.levels} showPosition />
+              </div>
+              <div className="backtest-card">
+                <h3>评分五分位</h3>
+                <BucketTable list={backtest.quintiles} />
+              </div>
+              <div className="backtest-card">
+                <h3>均值因子 · 量能 / 近 5 日均量</h3>
+                <BucketTable list={backtest.volume} />
+              </div>
+              <div className="backtest-card">
+                <h3>均值因子 · 主力资金偏离 5 日均值</h3>
+                <BucketTable list={backtest.capital} />
+              </div>
+            </div>
+
+            <div className="backtest-corr">
+              <span className="corr-title">与前瞻涨跌的相关系数（皮尔逊）</span>
+              {backtest.correlations.map(c => (
+                <span className="corr-item" key={c.label}>
+                  <em>{c.label}</em>
+                  <b>1日 {c.n1 == null ? '—' : c.n1.toFixed(3)}</b>
+                  <b>3日 {c.n3 == null ? '—' : c.n3.toFixed(3)}</b>
+                  <b>5日 {c.n5 == null ? '—' : c.n5.toFixed(3)}</b>
+                </span>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
       {formOpen && (
         <TradeRecordForm
           initial={editing}
           existingDates={records.filter(r => r.id !== editing?.id).map(r => r.date)}
-          prevCurrentAmount={prevSnapshot.prevCurrentAmount}
-          prevTotalAmount={prevSnapshot.prevTotalAmount}
-          prevTurnover={prevSnapshot.prevTurnover}
+          records={records}
           saving={saving}
           onCancel={() => { setFormOpen(false); setEditing(null); }}
           onSubmit={handleSubmit}
