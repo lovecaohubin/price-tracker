@@ -134,11 +134,18 @@ function TradeAnalysis() {
     let peak: number | null = null;
     let runningPeak = -Infinity;
     let maxDrawdown = 0;
+    // 最大盈利：历史累计盈亏的最高值，并记录同一条记录的盈利率
+    let maxProfit: number | null = null;
+    let maxProfitRate: number | null = null;
     for (const r of valid) {
       const v = r.currentAmount as number;
       if (v > runningPeak) runningPeak = v;
       if (runningPeak > 0) maxDrawdown = Math.max(maxDrawdown, (runningPeak - v) / runningPeak);
       if (peak == null || v > peak) peak = v;
+      if (r.cumPnl != null && (maxProfit == null || r.cumPnl > maxProfit)) {
+        maxProfit = r.cumPnl;
+        maxProfitRate = r.cumPnlRate ?? (r.totalAmount ? r.cumPnl / r.totalAmount : null);
+      }
     }
 
     return {
@@ -149,6 +156,8 @@ function TradeAnalysis() {
       cumPnl: latest?.cumPnl ?? null,
       cumPnlRate: latest?.cumPnlRate ?? null,
       peak,
+      maxProfit,
+      maxProfitRate,
       maxDrawdown,
       firstDate: first?.date ?? '',
       latestDate: latest?.date ?? '',
@@ -189,6 +198,24 @@ function TradeAnalysis() {
       : records;
     return matched.slice().reverse();
   }, [records, keyword]);
+
+  // 上证指数标色：相对上一条记录，上涨且突破整百/整千关口 → 红；下跌且跌破整百/整千关口 → 绿
+  const sseBreaks = useMemo(() => {
+    const map = new Map<string, 'up' | 'down'>();
+    let prev: number | null = null;
+    for (const r of records) {
+      const cur = r.sseIndex;
+      if (cur == null) continue;
+      if (prev != null && cur !== prev) {
+        const hundredLevel = Math.floor(cur / 100) - Math.floor(prev / 100);
+        const thousandLevel = Math.floor(cur / 1000) - Math.floor(prev / 1000);
+        if (cur > prev && (hundredLevel > 0 || thousandLevel > 0)) map.set(r.id, 'up');
+        else if (cur < prev && (hundredLevel < 0 || thousandLevel < 0)) map.set(r.id, 'down');
+      }
+      prev = cur;
+    }
+    return map;
+  }, [records]);
 
   const totalPages = Math.max(1, Math.ceil(listDesc.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
@@ -291,6 +318,16 @@ function TradeAnalysis() {
           <span className="metric-label">峰值金额</span>
           <span className="metric-value">{fmtMoney(stats.peak)}</span>
           <span className="metric-foot">历史最高</span>
+        </div>
+        <div className="metric-card">
+          <span className="metric-label">最大盈利</span>
+          <span className={`metric-value ${pnlClass(stats.maxProfit)}`}>
+            {fmtSigned(stats.maxProfit)}
+            {stats.maxProfitRate != null && (
+              <em className="metric-rate">{fmtPctSigned(stats.maxProfitRate)}</em>
+            )}
+          </span>
+          <span className="metric-foot">累计盈亏最高值</span>
         </div>
         <div className="metric-card">
           <span className="metric-label">最大回撤</span>
@@ -427,7 +464,7 @@ function TradeAnalysis() {
                 <th>成交量</th>
                 <th>涨幅</th>
                 <th>主力资金</th>
-                <th>上证指数</th>
+                <th title="较上一条记录上涨并突破整百/整千关口显示红色，下跌并跌破整百/整千关口显示绿色">上证指数</th>
                 <th className="col-ops">操作</th>
               </tr>
             </thead>
@@ -447,7 +484,9 @@ function TradeAnalysis() {
                     <td>{fmtMoney(r.turnover)}</td>
                     <td className={pnlClass(r.changePct)}>{fmtPctSigned(r.changePct)}</td>
                     <td className={pnlClass(r.mainCapital)}>{fmtSigned(r.mainCapital)}</td>
-                    <td>{r.sseIndex == null ? '—' : r.sseIndex.toFixed(2)}</td>
+                    <td className={sseBreaks.get(r.id) ?? ''}>
+                      {r.sseIndex == null ? '—' : r.sseIndex.toFixed(2)}
+                    </td>
                     <td className="col-ops" onClick={e => e.stopPropagation()}>
                       <button
                         className="btn-row"
