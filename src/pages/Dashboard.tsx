@@ -214,9 +214,34 @@ function Dashboard() {
             <div className="toolbar">
               <div className="toolbar-left">
                 {lastUpdate && (
-                  <span className="update-time">
-                    {refreshing ? '刷新中...' : `更新于 ${lastUpdate}`}
-                    <button className="btn-refresh" onClick={handleManualRefresh} title="手动刷新">↻</button>
+                  <span className={`update-time${refreshing ? ' is-refreshing' : ''}`}>
+                    <span className="update-dot" aria-hidden="true" />
+                    <span className="update-label">{refreshing ? '刷新中' : '更新于'}</span>
+                    <span className="update-value">{refreshing ? '···' : lastUpdate}</span>
+                    <button
+                      className="btn-refresh"
+                      onClick={handleManualRefresh}
+                      title="手动刷新"
+                      aria-label="手动刷新行情"
+                      disabled={refreshing}
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        width="18"
+                        height="18"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.1"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="M20.5 11A8.5 8.5 0 0 0 6.2 5.8L3.5 8.4" />
+                        <path d="M3.5 3.8v4.6h4.6" />
+                        <path d="M3.5 13a8.5 8.5 0 0 0 14.3 5.2l2.7-2.6" />
+                        <path d="M20.5 20.2v-4.6h-4.6" />
+                      </svg>
+                    </button>
                   </span>
                 )}
               </div>

@@ -146,33 +146,60 @@
 .shares-field {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 3px;
   font-size: 11px;
   color: var(--text-3);
   cursor: text;
 }
 
+/* 股数输入：默认融入条带，仅用虚线下划线暗示可编辑 */
 .shares-field input {
-  width: 86px;
-  padding: 3px 7px;
-  border: 1px solid #e3e8f2;
-  border-radius: 7px;
-  background: #fff;
-  color: var(--text-1);
-  font-size: 12.5px;
+  width: 78px;
+  padding: 2px 4px 3px;
+  appearance: textfield;
+  -moz-appearance: textfield;
+  border: none;
+  border-bottom: 1px dashed #ccd5e8;
+  border-radius: 0;
+  background: transparent;
+  /* 辅助数值层级：比金额更轻，与现价错开 */
+  color: #6b7390;
+  font-size: 13px;
   font-weight: 600;
-  text-align: right;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+  text-align: left;
   outline: none;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition: border-color 0.15s, background 0.15s, border-radius 0.15s;
+}
+
+/* 已录入：下划线转为淡靛蓝，暗示此处已有数据 */
+.shares-field input:not(:placeholder-shown) {
+  border-bottom-color: #b9c0f4;
+}
+
+/* 去掉数字框自带的上下微调箭头，避免破坏融合感 */
+.shares-field input::-webkit-outer-spin-button,
+.shares-field input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.shares-field input::placeholder {
+  color: #c5cbda;
+  font-weight: 500;
 }
 
 .shares-field input:hover {
-  border-color: #cdd6e8;
+  border-bottom-color: #a7b0c6;
+  background: rgba(99, 102, 241, 0.05);
+  border-radius: 6px;
 }
 
 .shares-field input:focus {
-  border-color: var(--primary);
-  box-shadow: var(--ring);
+  border-bottom: 1px solid var(--primary);
+  background: rgba(99, 102, 241, 0.08);
+  border-radius: 6px;
 }
 
 .shares-amount {
@@ -184,9 +211,23 @@
 }
 
 .shares-amount strong {
-  font-size: 13.5px;
-  font-weight: 700;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.1px;
+  /* 紫金渐变文字 */
   color: var(--primary-dark);
+  background: linear-gradient(100deg, var(--primary) 0%, #7c3aed 45%, var(--gold) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* 未录入股数：金额显示浅灰占位横线，避免紫金渐变被误读为已有数据 */
+.shares-amount .amount-empty {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.1px;
+  color: #c3ccdd;
 }
 
 /* 价格行 */

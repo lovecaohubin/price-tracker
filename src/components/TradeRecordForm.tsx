@@ -72,7 +72,7 @@ const DEFAULT_TOTAL_AMOUNT = 555000;
 
 // 自动联动字段的展示说明（表单 helper 文案 + 「自动」徽章的依据）
 const AUTO_HELPERS: Partial<Record<TradeRecordField, string>> = {
-  dayPnl: '= 当日总金额 - 昨日总金额',
+  dayPnl: '= 当日当前金额 - 昨日当前金额',
   cumPnl: '= 当前金额 - 总金额',
   cumPnlRate: '= 累计盈亏 / 总金额',
   positionRate: '= (市值1 + 市值2) / 当前金额',
@@ -133,9 +133,9 @@ function TradeRecordForm({
     if (sumMv != null && cur != null && cur !== 0) {
       next.positionRate = toInput(sumMv / cur, true);
     }
-    // 当日盈亏 = 当日总金额 - 昨日总金额（无昨日则保留原值）
-    if (tot != null && prevTotalAmount != null) {
-      next.dayPnl = toInput(tot - prevTotalAmount, false);
+    // 当日盈亏 = 当日当前金额 - 昨日当前金额（无昨日则保留原值）
+    if (cur != null && prevCurrentAmount != null) {
+      next.dayPnl = toInput(cur - prevCurrentAmount, false);
     }
     // 较上一日 = 当日成交量 - 昨日成交量（无昨日则保留原值）
     if (turn != null && prevTurnover != null) {

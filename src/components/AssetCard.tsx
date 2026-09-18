@@ -33,10 +33,9 @@ function AssetCard({ asset, isSelected, shares, onSharesChange, onSelect, onDele
     return p.toFixed(4);
   };
 
+  // 金额统一以「元」为单位展示，不做万/亿换算
   const formatAmount = (v: number) =>
-    v >= 10000
-      ? `${(v / 10000).toLocaleString('zh-CN', { maximumFractionDigits: 2 })}万`
-      : v.toLocaleString('zh-CN', { maximumFractionDigits: 2 });
+    `${v.toLocaleString('zh-CN', { maximumFractionDigits: 2 })} 元`;
 
   // 股数用本地草稿保证输入过程流畅；只在外部值真正变化时回填
   const [sharesDraft, setSharesDraft] = useState(() => (shares > 0 ? String(shares) : ''));
@@ -98,7 +97,9 @@ function AssetCard({ asset, isSelected, shares, onSharesChange, onSelect, onDele
         </label>
         <span className="shares-amount">
           <span>金额</span>
-          <strong>{positionAmount > 0 ? formatAmount(positionAmount) : '—'}</strong>
+          {positionAmount > 0
+            ? <strong>{formatAmount(positionAmount)}</strong>
+            : <span className="amount-empty">—</span>}
         </span>
       </div>
 
