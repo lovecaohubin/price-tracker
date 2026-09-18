@@ -18,7 +18,7 @@ const AuthContext = createContext<AuthContextType | null>(null);
 const MOCK_USER = {
   username: 'admin',
   password: '123456',
-  email: 'admin@price-tracker.com',
+  email: 'admin@a-share-price-tracker.com',
 };
 
 export function AuthProvider({ children }: { children: ReactNode }) {

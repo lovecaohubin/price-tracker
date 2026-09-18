@@ -38,7 +38,7 @@ function Login() {
       <div className="login-container">
         <div className="login-header">
           <div className="login-logo">📈</div>
-          <h1>追高跟踪</h1>
+          <h1>A股资产追高跟踪</h1>
           <p>登录以查看你的资产面板</p>
         </div>
 
