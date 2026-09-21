@@ -1,0 +1,108 @@
+/* 持有建议 · 模型验证：只放这套面板独有的样式，
+   表格 / 卡片 / 提示条沿用 TradeAnalysis.css 里的 .bt-table / .backtest-* */
+
+.hab-section {
+  margin-top: 0;
+  margin-bottom: 18px;
+  padding: 10px 16px 11px;
+  border-radius: 12px;
+  position: relative;
+  overflow: hidden;
+  transition: box-shadow 0.2s, transform 0.2s, border-color 0.2s;
+}
+
+/* 左侧紫金渐变色条：与卡片顶的渐变线、chart-section::before 呼应 */
+.hab-section::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: linear-gradient(180deg, var(--primary), #a78bfa 55%, var(--gold));
+}
+
+.hab-section:hover {
+  border-color: var(--primary);
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.10);
+}
+
+.hab-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.hab-btn {
+  border: 1px solid var(--line-strong);
+  background: #fff;
+  color: var(--text-2);
+  border-radius: 8px;
+  padding: 5px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.16s, color 0.16s, background 0.16s;
+}
+
+.hab-btn:hover:not(:disabled) {
+  border-color: var(--primary);
+  color: var(--primary-dark);
+}
+
+.hab-btn.primary {
+  border-color: transparent;
+  background: var(--primary-soft);
+  color: var(--primary-dark);
+  font-weight: 600;
+}
+
+.hab-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* 逐标的表：标的列带代码，档位分布列允许换行 */
+.hab-per-asset {
+  margin-top: 14px;
+  padding-bottom: 12px;
+}
+
+.hab-symbol {
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+/* 需要压过 TradeAnalysis.css 里 .bt-table td 的右对齐 + nowrap */
+.bt-table td.hab-dist {
+  text-align: left;
+  white-space: normal;
+  color: var(--text-2);
+}
+
+.hab-skipped {
+  margin-top: 12px;
+  background: var(--gold-soft);
+  color: var(--gold-deep);
+}
+
+.hab-skipped b {
+  color: var(--gold-deep);
+}
+
+/* 折叠态只剩标题行：收紧标题字距与按钮尺寸，保证首屏能看到整行 */
+.hab-section .backtest-head {
+  margin-bottom: 0;
+  gap: 10px;
+}
+
+.hab-section .backtest-head h2 {
+  font-size: 15px;
+}
+
+.hab-section .backtest-sub {
+  font-size: 11.5px;
+}
+
+

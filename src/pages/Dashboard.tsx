@@ -1,12 +1,15 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Asset } from '../types';
 import { defaultSymbols, createPlaceholder } from '../data';
 import { fetchAssetData, fetchQuotes } from '../services/aStockApi';
+import { fetchMarketSnapshot, MarketSnapshot } from '../services/market';
+import { buildHoldAdvice, HoldAdvice } from '../services/holdAdvice';
 import Header from '../components/Header';
 import AssetCard from '../components/AssetCard';
 import AddAssetForm from '../components/AddAssetForm';
 import PriceChart from '../components/PriceChart';
 import TradeAnalysis from '../components/TradeAnalysis';
+import HoldAdviceBacktest from '../components/HoldAdviceBacktest';
 import '../App.css';
 
 // localStorage 持久化键
@@ -73,6 +76,9 @@ function Dashboard() {
   const [activeSection, setActiveSection] = useState<'assets' | 'analysis'>('assets');
   // 持仓股数：代码 -> 股数（独立于行情，避免刷新时被覆盖）
   const [shares, setShares] = useState<Record<string, number>>(() => loadShares());
+  // 大盘快照：持有建议的「环境因子」，接口不可用时降级为仅个股因子
+  const [market, setMarket] = useState<MarketSnapshot | null>(null);
+  const [marketNote, setMarketNote] = useState('');
   const refreshTimer = useRef<ReturnType<typeof setInterval>>();
 
   // 用 ref 持有最新资产列表，避免 refreshAll 依赖 assets 导致定时器被反复重建
@@ -129,6 +135,24 @@ function Dashboard() {
     refreshAll(defaultSymbols);
   }, [refreshAll]);
 
+  // 大盘快照：服务端已缓存 60 秒，失败不阻塞行情，只把持有建议降级为「仅个股因子」
+  const loadMarket = useCallback(async () => {
+    try {
+      const snap = await fetchMarketSnapshot(60);
+      setMarket(snap);
+      setMarketNote(snap.stale ? snap.note ?? '大盘接口不可用，持有建议使用本地缓存数据' : '');
+    } catch (e) {
+      setMarket(null);
+      setMarketNote(
+        e instanceof Error
+          ? `大盘行情不可用（${e.message}），持有建议已降级为仅个股因子`
+          : '大盘行情不可用，持有建议已降级为仅个股因子',
+      );
+    }
+  }, []);
+
+  useEffect(() => { loadMarket(); }, [loadMarket]);
+
   // 每 10 秒自动刷新（仅交易时段 09:00-15:00，且仅在资产跟踪板块可见时）
   useEffect(() => {
     refreshTimer.current = setInterval(() => {
@@ -146,6 +170,15 @@ function Dashboard() {
   const selectedLive = selectedAsset
     ? assets.find(a => a.id === selectedAsset.id) || selectedAsset
     : null;
+
+  // 逐资产持有建议：占位资产（现价缺失）不计算，避免给出看似精确的假结论
+  const adviceMap = useMemo(() => {
+    const map = new Map<string, HoldAdvice>();
+    for (const a of assets) {
+      if (a.currentPrice > 0) map.set(a.id, buildHoldAdvice(a, market));
+    }
+    return map;
+  }, [assets, market]);
 
   const handleDelete = (id: string) => {
     setAssets(prev => prev.filter(a => a.id !== id));
@@ -185,6 +218,8 @@ function Dashboard() {
   const handleManualRefresh = () => {
     const symbols = assets.map(a => a.symbol);
     if (symbols.length > 0) refreshAll(symbols, false);
+    // 大盘是持有建议的环境因子，手动刷新时一并更新
+    loadMarket();
   };
 
   return (
@@ -193,62 +228,68 @@ function Dashboard() {
 
       <main className="main">
         <div className="section-tabs">
-          <button
-            className={`section-tab ${activeSection === 'assets' ? 'active' : ''}`}
-            onClick={() => setActiveSection('assets')}
-          >
-            资产跟踪
-          </button>
-          <button
-            className={`section-tab ${activeSection === 'analysis' ? 'active' : ''}`}
-            onClick={() => setActiveSection('analysis')}
-          >
-            数据分析
-          </button>
+          <div className="tabs-group">
+            <button
+              className={`section-tab ${activeSection === 'assets' ? 'active' : ''}`}
+              onClick={() => setActiveSection('assets')}
+            >
+              资产跟踪
+            </button>
+            <button
+              className={`section-tab ${activeSection === 'analysis' ? 'active' : ''}`}
+              onClick={() => setActiveSection('analysis')}
+            >
+              数据分析
+            </button>
+          </div>
+          <div className="tabs-tools">
+            {lastUpdate && (
+              <span className={`update-time${refreshing ? ' is-refreshing' : ''}`}>
+                <span className="update-dot" aria-hidden="true" />
+                <span className="update-label">{refreshing ? '刷新中' : '更新于'}</span>
+                <span className="update-value">{refreshing ? '···' : lastUpdate}</span>
+                <button
+                  className="btn-refresh"
+                  onClick={handleManualRefresh}
+                  title="手动刷新"
+                  aria-label="手动刷新行情"
+                  disabled={refreshing}
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    width="18"
+                    height="18"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.1"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M20.5 11A8.5 8.5 0 0 0 6.2 5.8L3.5 8.4" />
+                    <path d="M3.5 3.8v4.6h4.6" />
+                    <path d="M3.5 13a8.5 8.5 0 0 0 14.3 5.2l2.7-2.6" />
+                    <path d="M20.5 20.2v-4.6h-4.6" />
+                  </svg>
+                </button>
+              </span>
+            )}
+            <button className="btn-add" onClick={() => setShowAddForm(true)}>
+              + 添加跟踪
+            </button>
+          </div>
         </div>
 
         {activeSection === 'analysis' ? (
           <TradeAnalysis />
         ) : (
           <>
-            <div className="toolbar">
-              <div className="toolbar-left">
-                {lastUpdate && (
-                  <span className={`update-time${refreshing ? ' is-refreshing' : ''}`}>
-                    <span className="update-dot" aria-hidden="true" />
-                    <span className="update-label">{refreshing ? '刷新中' : '更新于'}</span>
-                    <span className="update-value">{refreshing ? '···' : lastUpdate}</span>
-                    <button
-                      className="btn-refresh"
-                      onClick={handleManualRefresh}
-                      title="手动刷新"
-                      aria-label="手动刷新行情"
-                      disabled={refreshing}
-                    >
-                      <svg
-                        viewBox="0 0 24 24"
-                        width="18"
-                        height="18"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2.1"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        aria-hidden="true"
-                      >
-                        <path d="M20.5 11A8.5 8.5 0 0 0 6.2 5.8L3.5 8.4" />
-                        <path d="M3.5 3.8v4.6h4.6" />
-                        <path d="M3.5 13a8.5 8.5 0 0 0 14.3 5.2l2.7-2.6" />
-                        <path d="M20.5 20.2v-4.6h-4.6" />
-                      </svg>
-                    </button>
-                  </span>
-                )}
+            {marketNote && !loading && (
+              <div className="advice-note">
+                <span>{marketNote}</span>
+                <button onClick={loadMarket}>重试</button>
               </div>
-              <button className="btn-add" onClick={() => setShowAddForm(true)}>
-                + 添加跟踪
-              </button>
-            </div>
+            )}
 
             {loading ? (
               <div className="loading-state">
@@ -262,6 +303,7 @@ function Dashboard() {
                     <AssetCard
                       key={asset.id}
                       asset={asset}
+                      advice={adviceMap.get(asset.id) ?? null}
                       isSelected={selectedAsset?.id === asset.id}
                       shares={shares[asset.symbol] ?? 0}
                       onSharesChange={v => handleSharesChange(asset.symbol, v)}
@@ -287,6 +329,9 @@ function Dashboard() {
                     <PriceChart key={selectedLive.id} asset={selectedLive} />
                   </div>
                 )}
+
+                {/* 卡片上的档位是否可信，由这套逐日滚动回测回答；默认收起，点开才拉历史数据 */}
+                <HoldAdviceBacktest targets={assets} />
               </>
             )}
 

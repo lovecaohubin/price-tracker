@@ -67,31 +67,47 @@ const dayRowCache = new Map<string, { rows: string[][]; at: number }>();
 const DAY_ROW_TTL = 60 * 1000;
 
 // 拉取并解析 K 线（东方财富每行为 CSV: 日期,开,收,高,低,量,额,振幅,涨跌幅,涨跌额,换手率）
-async function loadKlineRows(symbol: string, period: 'day' | 'week'): Promise<string[][] | null> {
+// 返回 stale=true 表示数据来自中间件本地缓存（非交易日 / 接口限流时降级），
+// 调用于区分实时/降级——资产卡片的"更新于"时间戳由调用层自行处理，这里只把信号透出来。
+async function loadKlineRows(
+  symbol: string,
+  period: 'day' | 'week',
+): Promise<{ rows: string[][] | null; stale: boolean }> {
   if (period === 'week') {
     const hit = weekRowCache.get(symbol);
-    if (hit) return hit;
+    if (hit) return { rows: hit, stale: false };
   } else {
     const hit = dayRowCache.get(symbol);
-    if (hit && Date.now() - hit.at < DAY_ROW_TTL) return hit.rows;
+    if (hit && Date.now() - hit.at < DAY_ROW_TTL) return { rows: hit.rows, stale: false };
   }
 
   try {
     const resp = await fetch(`/api/kline?symbol=${symbol}&period=${period}`);
-    if (!resp.ok) return null;
+    const isStale = resp.headers.get('X-Kline-Cache') === 'STALE';
+    if (!resp.ok) return { rows: null, stale: false };
 
     const json = await resp.json();
     const klines: unknown = json?.data?.klines;
-    if (!Array.isArray(klines)) return null;
+    if (!Array.isArray(klines)) return { rows: null, stale: isStale };
 
     const rows = (klines as string[]).map(line => String(line).split(','));
     if (period === 'week') weekRowCache.set(symbol, rows);
     else dayRowCache.set(symbol, { rows, at: Date.now() });
-    return rows;
+    if (isStale) console.warn(`[${symbol}] ${period} K线取自本地缓存（非交易日 / 接口失败降级）`);
+    return { rows, stale: isStale };
   } catch (e) {
     console.error(`[${symbol}] ${period} K线请求失败:`, e);
-    return null;
+    return { rows: null, stale: false };
   }
+}
+
+// 回测需要完整历史（近 300 根日 K），不能只用 fetchAssetData 返回的 30 天收盘价，
+// 因此单独暴露原始 K 线行；复用同一份内存缓存，不会额外打接口
+export async function fetchKlineRows(
+  symbol: string,
+  period: 'day' | 'week' = 'day',
+): Promise<{ rows: string[][] | null; stale: boolean }> {
+  return loadKlineRows(symbol.toLowerCase(), period);
 }
 
 // 从 K线 JSON 解析最高价
@@ -144,7 +160,8 @@ export async function fetchAssetData(symbol: string, externalQuote?: QuoteResult
 
   try {
     // 日线(不复权)：52周新高(近250个交易日) + 近30天走势图
-    const dayRows = await loadKlineRows(code, 'day');
+    const dayResult = await loadKlineRows(code, 'day');
+    const dayRows = dayResult.rows;
     if (dayRows) {
       console.log(`[${symbol}] 日线 ${dayRows.length} 条`);
 
@@ -156,7 +173,8 @@ export async function fetchAssetData(symbol: string, externalQuote?: QuoteResult
     }
 
     // 周线(不复权)：历史最高 + 2000年以来历史最低
-    const weekRows = await loadKlineRows(code, 'week');
+    const weekResult = await loadKlineRows(code, 'week');
+    const weekRows = weekResult.rows;
     if (weekRows) {
       console.log(`[${symbol}] 周线 ${weekRows.length} 条`);
 

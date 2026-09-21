@@ -1,6 +1,6 @@
 .asset-card {
   position: relative;
-  padding: 15px 16px 14px;
+  padding: 12px 14px 11px;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
@@ -37,7 +37,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .asset-info {
@@ -59,8 +59,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   border-radius: 8px;
   font-size: 11px;
   font-weight: 700;
@@ -130,8 +130,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  margin-bottom: 12px;
-  padding: 7px 10px;
+  margin-bottom: 8px;
+  padding: 4px 10px;
   background: linear-gradient(180deg, #f8faff 0%, #f4f7fd 100%);
   border: 1px solid #eef1fb;
   border-radius: 10px;
@@ -235,11 +235,11 @@
   display: flex;
   align-items: baseline;
   gap: 10px;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .current-price {
-  font-size: 25px;
+  font-size: 23px;
   font-weight: 700;
   color: var(--text-1);
   line-height: 1;
@@ -293,7 +293,7 @@
 
 /* 52周新高 + 历史最高 + 历史最低 并排一行 */
 .card-highs {
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .high-one-row {
@@ -317,7 +317,7 @@
 
 /* 进度条 */
 .progress-section {
-  padding-top: 9px;
+  padding-top: 7px;
   border-top: 1px dashed var(--line);
 }
 
@@ -359,3 +359,41 @@
   color: #d97706;
   font-weight: 600;
 }
+
+/* ===== 持有建议：档位徽标 + 一句话动作（悬浮查看评分依据） ===== */
+.card-advice {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--line);
+  cursor: help;
+}
+
+.advice-badge {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px 2px;
+  border-radius: 7px;
+  color: #6b7280;
+  background: #f3f4f6;
+}
+
+.advice-action {
+  min-width: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-3);
+  word-break: break-word;
+  padding-top: 1px;
+}
+
+/* 档位配色沿用全站红涨绿跌语义：红=偏多 / 绿=偏空 / 金=观望 */
+.card-advice.strong .advice-badge { color: #b91c1c; background: #fee2e2; }
+.card-advice.hold   .advice-badge { color: var(--primary-dark); background: var(--primary-soft); }
+.card-advice.watch  .advice-badge { color: #b45309; background: var(--gold-soft); }
+.card-advice.reduce .advice-badge { color: #047857; background: #d1fae5; }
+.card-advice.exit   .advice-badge { color: #065f46; background: #a7f3d0; }
+

@@ -1,6 +1,6 @@
-import { useState, useMemo, useEffect, useCallback, Fragment } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef, Fragment } from 'react';
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine,
 } from 'recharts';
 import { TradeRecord, TradeRecordField } from '../types';
 import { fetchTradeRecords, saveTradeRecords } from '../services/tradeLogApi';
@@ -121,6 +121,26 @@ function normalize(list: TradeRecord[]): TradeRecord[] {
 }
 
 function TradeAnalysis() {
+  // 图表容器尺寸：自维护 ResizeObserver，避免 Recharts ResponsiveContainer 在
+  // 组件卸载/重挂载时对已卸载 DOM 调用 getBoundingClientRect 抛空指针
+  const chartWrapRef = useRef<HTMLDivElement>(null);
+  const [chartSize, setChartSize] = useState({ width: 0, height: 280 });
+
+  useEffect(() => {
+    const el = chartWrapRef.current;
+    if (!el) return;
+    const update = () => {
+      const rect = el.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        setChartSize({ width: rect.width, height: rect.height });
+      }
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   const [records, setRecords] = useState<TradeRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -468,56 +488,67 @@ function TradeAnalysis() {
         {chartData.length === 0 ? (
           <div className="empty-state">该区间内没有可用于绘图的记录</div>
         ) : (
-          <ResponsiveContainer width="100%" height={280}>
-            <LineChart data={chartData} margin={{ top: 8, right: 16, left: 8, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis
-                dataKey="date"
-                tick={{ fontSize: 11, fill: '#6b7280' }}
-                minTickGap={40}
-                tickFormatter={(d: string) => d.slice(2)}
-              />
-              <YAxis
-                tick={{ fontSize: 11, fill: '#6b7280' }}
-                width={64}
-                domain={['auto', 'auto']}
-                tickFormatter={(v: number) => {
-                  if (metricMeta.pct) return `${(v * 100).toFixed(0)}%`;
-                  if (Math.abs(v) >= 10000) return `${(v / 10000).toFixed(1)}万`;
-                  return String(v);
-                }}
-              />
-              <Tooltip
-                labelFormatter={(d: string) => `日期 ${d}`}
-                formatter={(v: number) => [
-                  metricMeta.pct ? fmtPct(v) : v.toLocaleString('zh-CN', { maximumFractionDigits: 2 }),
-                  metricMeta.label,
-                ]}
-              />
-              <Line
-                type="monotone"
-                dataKey="value"
-                stroke="#6366f1"
-                strokeWidth={2}
-                dot={false}
-                name={metricMeta.label}
-              />
-              {avgValue != null && (
-                <ReferenceLine
-                  y={avgValue}
-                  stroke="#f59e0b"
-                  strokeDasharray="6 4"
-                  strokeWidth={1.5}
-                  label={{
-                    value: `平均 ${fmtMetricValue(avgValue, !!metricMeta.pct)}`,
-                    position: 'insideTopRight',
-                    fill: '#b45309',
-                    fontSize: 11,
+          <div className="chart-container" ref={chartWrapRef}>
+            {chartSize.width > 0 && (
+              <LineChart
+                data={chartData}
+                width={chartSize.width}
+                height={chartSize.height}
+                margin={{ top: 8, right: 16, left: 8, bottom: 0 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fontSize: 11, fill: '#6b7280' }}
+                  minTickGap={40}
+                  tickFormatter={(d: string) => d.slice(2)}
+                />
+                <YAxis
+                  tick={{ fontSize: 11, fill: '#6b7280' }}
+                  width={64}
+                  domain={['auto', 'auto']}
+                  tickFormatter={(v: number) => {
+                    if (metricMeta.pct) return `${(v * 100).toFixed(0)}%`;
+                    if (Math.abs(v) >= 10000) return `${(v / 10000).toFixed(1)}万`;
+                    return String(v);
                   }}
                 />
-              )}
-            </LineChart>
-          </ResponsiveContainer>
+                <Tooltip
+                  labelFormatter={(d: string) => `日期 ${d}`}
+                  formatter={(v: number) => [
+                    metricMeta.pct ? fmtPct(v) : v.toLocaleString('zh-CN', { maximumFractionDigits: 2 }),
+                    metricMeta.label,
+                  ]}
+                  // 关闭动画：Tooltip 动画期间会访问尚未挂载的容器 DOM，导致 getBoundingClientRect 空指针
+                  isAnimationActive={false}
+                  wrapperStyle={{ outline: 'none' }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="value"
+                  stroke="#6366f1"
+                  strokeWidth={2}
+                  dot={false}
+                  name={metricMeta.label}
+                  isAnimationActive={false}
+                />
+                {avgValue != null && (
+                  <ReferenceLine
+                    y={avgValue}
+                    stroke="#f59e0b"
+                    strokeDasharray="6 4"
+                    strokeWidth={1.5}
+                    label={{
+                      value: `平均 ${fmtMetricValue(avgValue, !!metricMeta.pct)}`,
+                      position: 'insideTopRight',
+                      fill: '#b45309',
+                      fontSize: 11,
+                    }}
+                  />
+                )}
+              </LineChart>
+            )}
+          </div>
         )}
       </div>
 

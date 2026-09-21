@@ -65,6 +65,51 @@ const klineCache = new Map<string, { text: string; expire: number }>()
 const CACHE_TTL_DAY = 30 * 1000
 const CACHE_TTL_WEEK = 10 * 60 * 1000
 
+// ===== K 线本地落盘缓存（data/klineHistory.json） =====
+// 与大盘数据同理：日 K 的历史部分一旦收盘就永不改变，没必要每次开页面都去求东财。
+// 但每只标的独立落盘到同一个文件里，按 symbol+period 索引。
+// 接口失败（非交易日、东财限流、网络问题）时降级读本地，由响应头 X-Kline-Cache: STALE 标识。
+const KLINE_STORE_FILE = path.resolve(process.cwd(), 'data', 'klineHistory.json')
+const KLINE_STORE_MAX_BARS: Record<'day' | 'week', number> = { day: 400, week: 1600 }
+
+interface KlineStore {
+  savedAt: number
+  series: Record<string, { rows: string[][]; updatedAt: number }>
+}
+
+let klineStore: KlineStore | null = null
+let klineStoreLoaded = false
+
+async function loadKlineStore(): Promise<KlineStore | null> {
+  if (klineStoreLoaded) return klineStore
+  klineStoreLoaded = true
+  try {
+    const raw = JSON.parse(await fs.promises.readFile(KLINE_STORE_FILE, 'utf-8'))
+    if (raw && typeof raw === 'object' && raw.series && typeof raw.series === 'object') {
+      klineStore = { savedAt: Number(raw.savedAt) || 0, series: raw.series }
+      console.log(`[K线中间件] 本地缓存已载入：${Object.keys(klineStore.series).length} 个序列`)
+    }
+  } catch {
+    // 首次运行没有缓存文件是正常情况
+    klineStore = null
+  }
+  return klineStore
+}
+
+async function saveKlineStore(): Promise<void> {
+  if (!klineStore) return
+  try {
+    await fs.promises.mkdir(path.dirname(KLINE_STORE_FILE), { recursive: true })
+    await fs.promises.writeFile(
+      KLINE_STORE_FILE,
+      JSON.stringify({ ...klineStore, savedAt: Date.now() }),
+      'utf-8',
+    )
+  } catch (err) {
+    console.warn('[K线中间件] 本地缓存写入失败:', err instanceof Error ? err.message : err)
+  }
+}
+
 // 自定义中间件：服务端拉取 K 线数据后透传给前端
 function klinePlugin(): Plugin {
   return {
@@ -73,7 +118,7 @@ function klinePlugin(): Plugin {
       server.middlewares.use('/api/kline', async (req, res) => {
         const url = new URL(req.url!, `http://${req.headers.host}`)
         const symbol = url.searchParams.get('symbol')
-        const period = url.searchParams.get('period') || 'day'  // day | week
+        const period = (url.searchParams.get('period') || 'day') as 'day' | 'week'
 
         if (!symbol || !/^(sh|sz)\d{6}$/i.test(symbol)) {
           res.writeHead(400, { 'Content-Type': 'application/json' })
@@ -86,6 +131,7 @@ function klinePlugin(): Plugin {
         // secid: 沪市(sh)→1.xxxxxx，深市(sz)→0.xxxxxx；klt: day→101，week→102
         // fqt=0 不复权，返回真实成交价；周线拉 1500 根，覆盖自 2000 年以来全部周K
         const code = symbol.toLowerCase()
+        const cacheKey = `${code}_${period}`
         const secid = `${code.startsWith('sh') ? '1' : '0'}.${code.slice(2)}`
         const klt = period === 'week' ? '102' : '101'
         const lmt = period === 'week' ? '1500' : '300'
@@ -108,12 +154,49 @@ function klinePlugin(): Plugin {
             text,
             expire: Date.now() + (period === 'week' ? CACHE_TTL_WEEK : CACHE_TTL_DAY),
           })
+
+          // 落盘：日 K 的历史部分永不改变，落盘后下次接口失败可以直接用
+          // 解析失败也不影响正常响应，所以这里单独 try
+          try {
+            const json = JSON.parse(text)
+            const klines = json?.data?.klines
+            if (Array.isArray(klines)) {
+              const rows = (klines as string[]).map((l) => String(l).split(','))
+              const max = KLINE_STORE_MAX_BARS[period] ?? 600
+              if (!klineStore) klineStore = { savedAt: 0, series: {} }
+              klineStore.series[cacheKey] = {
+                rows: rows.length > max ? rows.slice(-max) : rows,
+                updatedAt: Date.now(),
+              }
+              void saveKlineStore()
+            }
+          } catch (parseErr) {
+            console.warn(`[K线中间件] ${symbol}(${period}) 落盘解析失败:`, parseErr)
+          }
+
           res.setHeader('Content-Type', 'application/json; charset=utf-8')
           res.setHeader('Access-Control-Allow-Origin', '*')
           res.setHeader('X-Kline-Cache', 'MISS')
           res.end(text)
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err)
+          // 接口失败：尝试用本地缓存兜底（非交易日 / 限流 / 网络问题都能用）
+          await loadKlineStore()
+          const stored = klineStore?.series?.[cacheKey]
+          if (stored && stored.rows.length >= 6) {
+            const lastDate = stored.rows[stored.rows.length - 1][0]
+            console.warn(`[K线中间件] ${symbol}(${period}) 接口失败（${msg}），降级使用本地缓存（截至 ${lastDate}）`)
+            const text = JSON.stringify({
+              data: { klines: stored.rows.map((r) => r.join(',')) },
+            })
+            // 短期再透到内存缓存，避免连续失败时反复读盘
+            klineCache.set(apiUrl, { text, expire: Date.now() + CACHE_TTL_DAY })
+            res.setHeader('Content-Type', 'application/json; charset=utf-8')
+            res.setHeader('Access-Control-Allow-Origin', '*')
+            res.setHeader('X-Kline-Cache', 'STALE')
+            res.end(text)
+            return
+          }
           console.error(`[K线中间件] ${symbol}(${period}) 最终失败:`, msg)
           res.writeHead(502, { 'Content-Type': 'application/json' })
           res.end(JSON.stringify({ error: msg }))

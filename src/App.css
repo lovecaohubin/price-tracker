@@ -2,30 +2,45 @@
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  animation: app-fade-in 0.32s ease-out;
+}
+
+@keyframes app-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 .main {
-  max-width: 1300px;
+  max-width: 1360px;
   width: 100%;
   margin: 0 auto;
-  padding: 20px 20px 48px;
+  padding: 14px 28px 36px;
 }
 
-/* 主板块切换：分段控件 */
+/* 主板块切换：分段控件 + 右侧工具区，整体顶栏一行 */
 .section-tabs {
   display: flex;
-  width: fit-content;
-  gap: 4px;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 12px;
   padding: 4px;
-  margin-bottom: 16px;
+  margin-bottom: 10px;
   background: rgba(255, 255, 255, 0.78);
   border: 1px solid var(--line);
   border-radius: 12px;
   box-shadow: var(--sh-1);
 }
 
+/* 左侧：分段控件 */
+.tabs-group {
+  display: flex;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
 .section-tab {
-  padding: 8px 22px;
+  padding: 7px 20px;
   border: none;
   background: transparent;
   border-radius: 9px;
@@ -47,34 +62,34 @@
   box-shadow: 0 4px 12px rgba(79, 70, 229, 0.28);
 }
 
-/* 工具栏 */
-.toolbar {
+/* 右侧：更新时间 + 手动刷新 + 添加跟踪 */
+.tabs-tools {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: 14px;
-  flex-wrap: wrap;
-  gap: 10px;
+  gap: 14px;
+  flex: 0 0 auto;
+  padding-right: 6px;
 }
 
-.toolbar-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
+/* 状态区与操作按钮之间用细竖线分区，两个 Tab 页都能看到，视觉上是一体的顶栏 */
+.tabs-tools .update-time {
+  padding-right: 14px;
+  border-right: 1px solid var(--line);
 }
 
 /* 实时状态（无背景框版）：脉冲圆点 + 标签 + 高亮时间 + 幽灵刷新按钮 */
 .update-time {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   line-height: 1;
 }
 
 /* 实时脉冲圆点 */
 .update-dot {
   flex: none;
+  /* 父级按文字基线对齐，圆点单独回到垂直居中，避免沉到文字下方 */
+  align-self: center;
   width: 9px;
   height: 9px;
   border-radius: 50%;
@@ -108,13 +123,13 @@
   letter-spacing: 0.01em;
 }
 
-/* 刷新按钮：默认无底无框，悬停才显形 */
 .btn-refresh {
   display: inline-flex;
   align-items: center;
+  align-self: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   margin-left: 2px;
   padding: 0;
   color: var(--primary);
@@ -125,16 +140,19 @@
   transition: color 0.18s, background 0.18s, box-shadow 0.18s, transform 0.18s;
 }
 
-.btn-refresh svg {
-  display: block;
+.btn-refresh:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.35);
 }
 
-.btn-refresh:hover:not(:disabled),
-.btn-refresh:focus-visible:not(:disabled) {
+.btn-refresh:hover {
   color: #fff;
   background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.32);
   transform: rotate(90deg);
+}
+
+.btn-refresh svg {
+  display: block;
 }
 
 .btn-refresh:active:not(:disabled) {
@@ -169,9 +187,11 @@
 }
 
 .btn-add {
-  padding: 9px 20px;
+  /* 与左侧分段控件等高，整行视觉齐平 */
+  padding: 7px 18px;
   font-size: 13px;
   font-weight: 600;
+  line-height: 18px;
   color: #fff;
   border: none;
   border-radius: 10px;
@@ -190,12 +210,39 @@
   transform: translateY(0);
 }
 
-/* 卡片网格 — 固定 3 列 */
+/* 持有建议降级提示：大盘环境缺失时明确告知，而不是静默少算一个因子 */
+.advice-note {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+  padding: 7px 13px;
+  background: var(--gold-soft);
+  border: 1px solid var(--gold-line);
+  border-radius: 10px;
+  font-size: 12.5px;
+  color: var(--gold-deep);
+}
+
+.advice-note button {
+  flex-shrink: 0;
+  border: none;
+  background: var(--gold-deep);
+  color: #fff;
+  border-radius: 7px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* 卡片网格 — 每张卡至少 400px：1680px 内容区里最多正好排 3 列，
+   宽屏固定一行 3 个；屏宽不足时自动降为 2 列 / 1 列，卡片永不被挤压截断 */
 .asset-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
-  margin-bottom: 24px;
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  gap: 14px;
+  margin-bottom: 14px;
 }
 
 /* 图表区域 */
@@ -294,13 +341,7 @@
   color: var(--text-3);
 }
 
-/* 小屏回退 2 列 */
-@media (max-width: 900px) {
-  .asset-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
+/* auto-fill 已自动降列，小屏只需收紧间距与内边距 */
 @media (max-width: 560px) {
   .main {
     padding: 16px 14px 40px;

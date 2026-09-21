@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Asset } from '../types';
+import { HoldAdvice } from '../services/holdAdvice';
 import './AssetCard.css';
 
 function getTurnoverLevel(rate: number): string {
@@ -12,6 +13,7 @@ function getTurnoverLevel(rate: number): string {
 
 interface Props {
   asset: Asset;
+  advice: HoldAdvice | null;             // 该资产的持有建议（现价未加载时为 null）
   isSelected: boolean;
   shares: number;                        // 持仓股数
   onSharesChange: (shares: number) => void;
@@ -19,7 +21,17 @@ interface Props {
   onDelete: () => void;
 }
 
-function AssetCard({ asset, isSelected, shares, onSharesChange, onSelect, onDelete }: Props) {
+// 悬浮说明：档位 + 评分 + 置信度 + 动作 + 逐项依据
+function adviceTip(advice: HoldAdvice): string {
+  const conf = `置信度${advice.confidenceLabel}（因子覆盖 ${Math.round(advice.coverage * 100)}%）`;
+  if (!advice.adviceAvailable) return `${conf}\n${advice.action}`;
+  return (
+    `${advice.levelLabel} · ${advice.score} 分 · ${conf}\n${advice.action}\n` +
+    advice.reasons.map(r => `${r.delta > 0 ? '+' : ''}${r.delta} ${r.text}`).join('\n')
+  );
+}
+
+function AssetCard({ asset, advice, isSelected, shares, onSharesChange, onSelect, onDelete }: Props) {
   const safe52W = asset.high52Week || 1;
   const safeATH = asset.allTimeHigh || 1;
   const gap52W = ((safe52W - asset.currentPrice) / safe52W) * 100;
@@ -27,10 +39,14 @@ function AssetCard({ asset, isSelected, shares, onSharesChange, onSelect, onDele
   const isNearHigh = gapATH <= 5;
   const isAtHigh = gapATH <= 0.5;
 
+  // 股价统一保留两位小数（千位用逗号，<1 元保留四位）
+  // 使用 minimumFractionDigits 保证末尾 0 不被丢弃（如 24.60、5.27）
   const formatPrice = (p: number) => {
-    if (p >= 1000) return p.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    if (p >= 1) return p.toFixed(2);
-    return p.toFixed(4);
+    if (p < 1) return p.toFixed(4);
+    return p.toLocaleString('zh-CN', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
   };
 
   // 金额统一以「元」为单位展示，不做万/亿换算
@@ -106,7 +122,7 @@ function AssetCard({ asset, isSelected, shares, onSharesChange, onSelect, onDele
       <div className="card-price">
         <span className="current-price">{formatPrice(asset.currentPrice)}</span>
         <span className={`change-badge ${asset.changePercent >= 0 ? 'up' : 'down'}`}>
-          {asset.changePercent >= 0 ? '↑' : '↓'} {Math.abs(asset.changePercent)}%
+          {asset.changePercent >= 0 ? '↑' : '↓'} {Math.abs(asset.changePercent).toFixed(2)}%
         </span>
         <span className={`turnover-badge ${getTurnoverLevel(asset.turnoverRate)}`}>换手 {asset.turnoverRate.toFixed(2)}%</span>
       </div>
@@ -130,6 +146,19 @@ function AssetCard({ asset, isSelected, shares, onSharesChange, onSelect, onDele
           {isAtHigh ? '🚀 创历史新高！' : `距52周新高 ${gap52W.toFixed(1)}%`}
         </span>
       </div>
+
+      {/* 持有建议：档位 + 一句话动作，悬浮查看评分依据 */}
+      {advice && (
+        <div
+          className={`card-advice ${advice.adviceAvailable ? advice.level : 'na'}`}
+          title={adviceTip(advice)}
+        >
+          <span className="advice-badge">
+            {advice.adviceAvailable ? `${advice.levelLabel} · ${advice.score}` : '数据不足'}
+          </span>
+          <span className="advice-action">{advice.action}</span>
+        </div>
+      )}
     </div>
   );
 }
