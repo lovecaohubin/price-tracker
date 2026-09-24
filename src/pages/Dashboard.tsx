@@ -250,7 +250,7 @@ function Dashboard() {
               className={`section-tab ${activeSection === 'analysis' ? 'active' : ''}`}
               onClick={() => setActiveSection('analysis')}
             >
-              数据分析
+              资产分析
             </button>
             <button
               className={`section-tab ${activeSection === 'stock' ? 'active' : ''}`}
