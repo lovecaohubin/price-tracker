@@ -28,7 +28,8 @@ import type {
 } from '../src/types'
 
 // ===== 出站 HTTP（与 stockAnalysis 同样的并发限流 + 退避） =====
-const MAX_CONCURRENCY = 4
+// 8 并发：新浪接口容忍度高于东财，且涨停池需要给每只股票拉日 K
+const MAX_CONCURRENCY = 8
 let activeOutbound = 0
 const outboundWaiters: (() => void)[] = []
 async function acquire(): Promise<void> {
@@ -50,13 +51,17 @@ const HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
   Accept: '*/*',
 }
-async function fetchOutbound(url: string): Promise<string> {
+async function fetchOutbound(
+  url: string,
+  extraHeaders?: Record<string, string>,
+): Promise<string> {
   // 增加重试次数 + 指数退避，规避东财瞬时连接重置
   const delays = [500, 1000, 2000, 4000, 6000]
+  const headers = extraHeaders ? { ...HEADERS, ...extraHeaders } : HEADERS
   for (let attempt = 0; attempt <= delays.length; attempt++) {
     await acquire()
     try {
-      const r = await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(20000) })
+      const r = await fetch(url, { headers, signal: AbortSignal.timeout(20000) })
       const text = await r.text()
       if (r.ok) return text
       throw new Error(`HTTP ${r.status}`)
@@ -71,6 +76,12 @@ async function fetchOutbound(url: string): Promise<string> {
 }
 async function fetchJson<T = unknown>(url: string): Promise<T> {
   return JSON.parse(await fetchOutbound(url)) as T
+}
+
+/** 新浪接口（需带新浪 Referer，否则返回 403 / 空） */
+const SINA_HEADERS = { Referer: 'https://finance.sina.com.cn' }
+async function fetchJsonSina<T = unknown>(url: string): Promise<T> {
+  return JSON.parse(await fetchOutbound(url, SINA_HEADERS)) as T
 }
 
 // ===== 工具 =====
@@ -101,7 +112,10 @@ const symbolOf = (market: number, code: string): string =>
 function limitPrices(prevClose: number, code: string): [number, number] {
   const cc = code.toLowerCase()
   let pct = 0.1
-  if (cc.startsWith('300') || cc.startsWith('688')) pct = 0.2
+  // 创业板：300xxx / 301xxx（注册制后 301 段同属创业板，此前漏了 301）
+  // 科创板：688xxx / 689xxx
+  if (cc.startsWith('300') || cc.startsWith('301') || cc.startsWith('688') || cc.startsWith('689'))
+    pct = 0.2
   else if (cc.startsWith('8') || cc.startsWith('920') || cc.startsWith('430')) pct = 0.3
   // ST 通常有特殊前缀（如 *ST），但代码段无法可靠识别；保守不打折，避免误判
   const up = Math.round(prevClose * (1 + pct) * 100) / 100
@@ -200,47 +214,289 @@ async function fetchZtPool(): Promise<{
   return { rows, tradeDate, errorMsg }
 }
 
-/** 拉个股最近 2 根日 K 线，用于首板判定 */
+// ==================================================================
+// 备用数据源：新浪财经（东财 push2 clist 被限流/封禁时使用）
+//  - 涨幅排行：Market_Center.getHQNodeData（按 changepercent 降序）
+//  - 日 K：CN_MarketData.getKLineData（含当日 + 昨日，用于首板判定）
+//  局限：不提供「主力净流入 / 封单金额 / 行业」，这些字段降级为 null
+// ==================================================================
+interface SinaRankRow {
+  symbol?: string // sh603248
+  code?: string // 603248
+  name?: string
+  trade?: string // 现价
+  pricechange?: string | number
+  changepercent?: string | number // 涨跌幅（百分比，19.99 = 19.99%）
+  settlement?: string // 昨收
+  open?: string
+  high?: string
+  low?: string
+  volume?: string | number // 成交量（股）
+  amount?: string | number // 成交额（元）
+  turnoverratio?: string | number // 换手率 %
+  mktcap?: string | number // 总市值（万元）
+  nmc?: string | number // 流通市值（万元）
+}
+
+/** 日 K 缓存（按 symbol+lmt）：首板判定与涨停次数统计复用同一份，
+ *  避免同一只股票重复请求（此前 53 只 × 2 次 = 106 次请求，耗时 150s+） */
+const klineCache = new Map<
+  string,
+  {
+    bars: {
+      date: string
+      open: number
+      close: number
+      high: number
+      low: number
+      volume: number
+    }[]
+    expireAt: number
+  }
+>()
+const KLINE_TTL_MS = 5 * 60 * 1000
+
+/** 新浪日 K 数据（scale=240 日线，不复权） */
+async function fetchKlineSina(
+  symbol: string,
+  lmt = 30,
+): Promise<{ date: string; open: number; close: number; high: number; low: number; volume: number }[]> {
+  const key = `${symbol}_${lmt}`
+  const hit = klineCache.get(key)
+  if (hit && hit.expireAt > Date.now()) return hit.bars
+  const url =
+    'https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/' +
+    `CN_MarketData.getKLineData?symbol=${symbol}&scale=240&ma=no&datalen=${lmt}`
+  const json = await fetchJsonSina<
+    { day?: string; open?: string; high?: string; low?: string; close?: string; volume?: string }[]
+  >(url)
+  if (!Array.isArray(json)) return []
+  const bars = json.map((r) => ({
+    date: String(r.day ?? ''),
+    open: Number(r.open ?? 0),
+    close: Number(r.close ?? 0),
+    high: Number(r.high ?? 0),
+    low: Number(r.low ?? 0),
+    volume: Number(r.volume ?? 0),
+  }))
+  klineCache.set(key, { bars, expireAt: Date.now() + KLINE_TTL_MS })
+  return bars
+}
+
+/** 拉涨停候选（新浪涨幅排行），按涨幅降序取前若干条后本地筛涨停 */
+async function fetchZtPoolSina(): Promise<{
+  rows: {
+    row: SinaRankRow
+    symbol: string
+    prevClose: number
+    changePct: number
+  }[]
+  tradeDate: string
+  errorMsg: string | null
+}> {
+  // node=hs_a 沪深京 A 股；num 单页上限 100，取 2 页共 200 条覆盖涨停股
+  const pages = [1, 2]
+  const merged: SinaRankRow[] = []
+  let errorMsg: string | null = null
+  for (const page of pages) {
+    const url =
+      'http://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/' +
+      `Market_Center.getHQNodeData?page=${page}&num=100&sort=changepercent&asc=0&node=hs_a`
+    try {
+      const json = await fetchJsonSina<SinaRankRow[]>(url)
+      if (Array.isArray(json)) merged.push(...json)
+    } catch (e) {
+      errorMsg = e instanceof Error ? e.message : String(e)
+      console.error(`[首版涨停][新浪] 涨幅排行第 ${page} 页失败:`, errorMsg)
+      // 第一页失败直接返回（没有基础数据）；第二页失败则沿用第一页
+      if (page === 1) return { rows: [], tradeDate: ymd(new Date()), errorMsg }
+      break
+    }
+  }
+  if (!merged.length) {
+    return {
+      rows: [],
+      tradeDate: ymd(new Date()),
+      errorMsg: errorMsg ?? '新浪涨幅排行返回空',
+    }
+  }
+
+  const rows = merged
+    .filter((r) => {
+      const changePctPct = num(r.changepercent)
+      const trade = num(r.trade)
+      const high = num(r.high)
+      const prev = num(r.settlement) ?? 0
+      const code = String(r.code ?? '')
+      if (changePctPct == null || trade == null || high == null) return false
+      // 涨幅门槛（创业板/科创板 20%、北交所 30% 也都会被 9.9 以上覆盖）
+      if (changePctPct < 9.9) return false
+      // 已封板：现价 == 最高价，且已达涨停价
+      if (!isSealedUp(trade, high, prev, code)) return false
+      return true
+    })
+    .map((r) => ({
+      row: r,
+      symbol: String(r.symbol ?? ''),
+      prevClose: num(r.settlement) ?? 0,
+      changePct: (num(r.changepercent) ?? 0) / 100,
+    }))
+
+  return { rows, tradeDate: ymd(new Date()), errorMsg: null }
+}
+
+/** 新浪行 → ZtListItem（主力净流入 / 封单金额 / 行业 新浪不提供，降级为 null） */
+function sinaRowToListItem(
+  row: SinaRankRow,
+  symbol: string,
+  prevClose: number,
+  changePct: number,
+  judge: { isFirstBoard: boolean; boardCount: number },
+): ZtListItem {
+  const code = String(row.code ?? '')
+  const price = num(row.trade) ?? 0
+  const high = num(row.high) ?? 0
+  const low = num(row.low) ?? 0
+  const open = num(row.open) ?? 0
+  // 新浪 volume 单位为「股」，东财口径为「手」，这里统一换算成手
+  const volumeHands = Math.round((num(row.volume) ?? 0) / 100)
+  const turnover = num(row.amount) ?? 0
+  const amplitude = prevClose > 0 ? (high - low) / prevClose : 0
+  // 市值：新浪 mktcap 单位为「万元」→ 转成元
+  const marketCap = (num(row.mktcap) ?? 0) * 1e4
+  return {
+    code,
+    name: String(row.name ?? symbol),
+    market: symbol.toLowerCase().startsWith('sh') ? 1 : 0,
+    price,
+    changePct,
+    changeAmt: price - prevClose,
+    volumeHands,
+    turnover,
+    amplitude,
+    marketCap,
+    turnoverRate: num(row.turnoverratio),
+    volumeRatio: null,
+    industry: null,
+    sealedAmt: null,
+    mainNet: null,
+    isFirstBoard: judge.isFirstBoard,
+    boardCount: judge.boardCount,
+    symbol,
+    open,
+    high,
+    low,
+    prevClose,
+  }
+}
+
+/** 东财行 → ZtListItem 列表（含首板判定的 K 线请求） */
+async function buildItemsFromEm(
+  rows: { row: RawClistRow; symbol: string; prevClose: number; changePct: number }[],
+): Promise<ZtListItem[]> {
+  const items: ZtListItem[] = []
+  await Promise.all(
+    rows.map(async ({ row, symbol, prevClose, changePct }) => {
+      const code = String(row.f12 ?? '')
+      let judge = { isFirstBoard: true, boardCount: 1 }
+      try {
+        const k = await fetch2DayKline(symbol)
+        if (k && k.prevClose > 0 && k.prevPrevClose > 0) {
+          judge = judgeFirstBoard(k.prevPrevClose, k.prevClose, code, changePct)
+        } else {
+          judge = { isFirstBoard: true, boardCount: 1 }
+        }
+      } catch {
+        judge = { isFirstBoard: true, boardCount: 1 }
+      }
+      items.push(rowToListItem(row, symbol, prevClose, changePct, judge))
+    }),
+  )
+  return items
+}
+
+/** 新浪行 → ZtListItem 列表（含首板判定的 K 线请求） */
+async function buildItemsFromSina(
+  rows: { row: SinaRankRow; symbol: string; prevClose: number; changePct: number }[],
+): Promise<ZtListItem[]> {
+  const items: ZtListItem[] = []
+  await Promise.all(
+    rows.map(async ({ row, symbol, prevClose, changePct }) => {
+      const code = String(row.code ?? '')
+      let judge = { isFirstBoard: true, boardCount: 1 }
+      try {
+        // lmt=30 与涨停次数统计保持一致，命中同一份 K 线缓存（避免重复请求）
+        const klines = await fetchKlineSina(symbol, 30)
+        // 新浪日 K 含当日：倒数第二根=昨日，倒数第三根=前日
+        if (klines.length >= 3) {
+          const prevBar = klines[klines.length - 2]
+          const prevPrevBar = klines[klines.length - 3]
+          judge = judgeFirstBoard(prevPrevBar.close, prevBar.close, code, changePct)
+        }
+      } catch {
+        judge = { isFirstBoard: true, boardCount: 1 }
+      }
+      items.push(sinaRowToListItem(row, symbol, prevClose, changePct, judge))
+    }),
+  )
+  return items
+}
+
+/** 拉个股日 K，取「昨日 + 前日」两根收盘价，用于首板判定
+ *  （昨日涨停价要基于前日 close 计算，所以必须拿前日）
+ */
 async function fetch2DayKline(symbol: string): Promise<{
-  date: string
-  close: number
+  prevClose: number
+  prevPrevClose: number
 } | null> {
   const url =
     `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${secidOf(symbol)}` +
     `&klt=101&fqt=0&lmt=10&end=20500101&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55`
   const json = await fetchJson<{ data?: { klines?: string[] } }>(url)
   const rows = json?.data?.klines ?? []
-  if (!rows.length) return null
-  // 取最后两根：[date, open, close, high, low]
-  const parseLine = (l: string) => {
-    const p = l.split(',')
-    return { date: p[0], close: Number(p[2]) }
+  if (rows.length < 3) return null
+  // K 线行：[date, open, close, high, low]；最后一根是当日，往前依次昨日 / 前日
+  const closeOf = (l: string) => Number(l.split(',')[2])
+  return {
+    prevClose: closeOf(rows[rows.length - 2]),
+    prevPrevClose: closeOf(rows[rows.length - 3]),
   }
-  const last = parseLine(rows[rows.length - 1])
-  const prev = rows.length >= 2 ? parseLine(rows[rows.length - 2]) : null
-  // 用昨日 close 列入判定（更稳定）；当日信息主要靠 clist 给出
-  void last
-  return prev
 }
 
 /** 首板判定：
- *  - 取昨日收盘价 + 昨日涨停上限
- *  - 昨日 close < 昨日涨停上限 - 0.05 ⇒ 昨日未封板
- *  - 今日已封板 ⇒ 首板
- *  - 否则为连板，统计连续天数 = ceil(连板天数)
+ *  - 昨日涨停价必须基于「前日收盘价」计算，再判断昨日收盘是否触及
+ *    （此前用昨日收盘价算它自己的涨停价，恒不成立 ⇒ 永远判成首板）
+ *  - 昨日未封板 + 今日已封板 ⇒ 首板
+ *  - 昨日已封板 ⇒ 连板，按累计涨幅粗估连板数
  */
-function judgeFirstBoard(prevClose: number, code: string, todayChangePct: number): {
+function judgeFirstBoard(
+  prevPrevClose: number,
+  prevClose: number,
+  code: string,
+  todayChangePct: number,
+): {
   isFirstBoard: boolean
   boardCount: number
 } {
-  if (prevClose <= 0) return { isFirstBoard: true, boardCount: 1 }
-  const [, upLimit] = limitPrices(prevClose, code)
-  // 昨日 close < 涨停价容差 ⇒ 昨日未封板 ⇒ 今日封板 ⇒ 首板
-  const wasUp = prevClose >= upLimit - 0.05
-  if (!wasUp) return { isFirstBoard: true, boardCount: 1 }
+  if (prevPrevClose <= 0 || prevClose <= 0) {
+    return { isFirstBoard: true, boardCount: 1 }
+  }
+  // 昨日涨停上限（基于前日 close）
+  const [, prevUpLimit] = limitPrices(prevPrevClose, code)
+  // 昨日 close 触及昨日涨停价 ⇒ 昨日已封板 ⇒ 今日为连板
+  const yesterdaySealed = prevClose >= prevUpLimit - 0.05
+  if (!yesterdaySealed) return { isFirstBoard: true, boardCount: 1 }
   // 昨日已涨停 ⇒ 连板；按涨幅幅度粗估连板次数（仅供参考）
   const code2 = code.toLowerCase()
-  const pct = code2.startsWith('300') || code2.startsWith('688') ? 0.2 : 0.1
+  const pct =
+    code2.startsWith('300') ||
+    code2.startsWith('301') ||
+    code2.startsWith('688') ||
+    code2.startsWith('689')
+      ? 0.2
+      : code2.startsWith('8') || code2.startsWith('920') || code2.startsWith('430')
+        ? 0.3
+        : 0.1
   // 累计涨幅 ≈ (1+pct)^n - 1 ≥ todayChangePct/100
   const ratio = 1 + todayChangePct / 100
   const n = ratio > 0 ? Math.log(ratio) / Math.log(1 + pct) : 1
@@ -283,27 +539,30 @@ function rowToListItem(
 async function fetchList(): Promise<ZtListResponse> {
   if (listCache && listCache.expireAt > Date.now()) return listCache.resp
 
-  const { rows, tradeDate, errorMsg } = await fetchZtPool()
+  // ===== 双数据源：东财优先，失败/为空时回退新浪 =====
+  const em = await fetchZtPool()
+  let items: ZtListItem[] = []
+  let tradeDate = em.tradeDate
+  let errorMsg: string | null = em.errorMsg
+  let source: 'em' | 'sina' = 'em'
 
-  // 并发拉日K + 判定首板
-  const items: ZtListItem[] = []
-  await Promise.all(
-    rows.map(async ({ row, symbol, prevClose, changePct }) => {
-      let judge = { isFirstBoard: true, boardCount: 1 }
-      try {
-        const prev = await fetch2DayKline(symbol)
-        // prev 是昨日收盘，prevClose（来自 clist.f18）已经是昨收，等价
-        if (prev && prev.close > 0) {
-          judge = judgeFirstBoard(prev.close, String(row.f12 ?? ''), changePct)
-        } else {
-          judge = judgeFirstBoard(prevClose, String(row.f12 ?? ''), changePct)
-        }
-      } catch {
-        judge = judgeFirstBoard(prevClose, String(row.f12 ?? ''), changePct)
-      }
-      items.push(rowToListItem(row, symbol, prevClose, changePct, judge))
-    }),
-  )
+  if (!em.errorMsg && em.rows.length) {
+    items = await buildItemsFromEm(em.rows)
+  } else {
+    // 东财被限流/封禁 → 切新浪涨幅排行
+    console.warn(
+      `[首版涨停] 东财不可用（${em.errorMsg ?? '空数据'}），回退新浪数据源`,
+    )
+    const sina = await fetchZtPoolSina()
+    if (!sina.errorMsg && sina.rows.length) {
+      items = await buildItemsFromSina(sina.rows)
+      tradeDate = sina.tradeDate
+      errorMsg = null
+      source = 'sina'
+    } else {
+      errorMsg = sina.errorMsg ?? em.errorMsg
+    }
+  }
 
   // 按涨幅降序、再按封单金额降序
   items.sort((a, b) => {
@@ -314,9 +573,13 @@ async function fetchList(): Promise<ZtListResponse> {
   const firstBoard = items.filter((i) => i.isFirstBoard)
 
   const baseNote =
-    '数据源：东方财富 push2 clist 涨停股池（按涨幅排序）+' +
-    '日K本地判定首板。f2==f15 且已达涨停价 ⇒ 已封板；与昨日对比昨日是否涨停 ⇒ 区分首板/连板。' +
-    '北交所/创业板/科创板涨跌停阈值不同，已分别处理。'
+    source === 'sina'
+      ? '数据源：新浪财经涨幅排行（hs_a，按 changepercent 降序）+ 新浪日K本地判定首板。' +
+        '现价==最高价 且已达涨停价 ⇒ 已封板；与昨日对比昨日是否涨停 ⇒ 区分首板/连板。' +
+        '⚠️ 新浪不提供主力净流入 / 封单金额 / 行业，这些字段显示为「—」。'
+      : '数据源：东方财富 push2 clist 涨停股池（按涨幅排序）+' +
+        '日K本地判定首板。f2==f15 且已达涨停价 ⇒ 已封板；与昨日对比昨日是否涨停 ⇒ 区分首板/连板。' +
+        '北交所/创业板/科创板涨跌停阈值不同，已分别处理。'
 
   const resp: ZtListResponse = {
     items,
@@ -570,26 +833,35 @@ const ANALYSIS_TTL_MS = 60 * 1000 // 1 分钟缓存
 // 上游失败时同理缩短，保证重试有效
 const ANALYSIS_ERR_TTL_MS = 5 * 1000
 
-/** 单只涨停股近 30 个交易日日 K；用于统计涨停次数 */
+/** 单只涨停股近 30 个交易日日 K；用于统计涨停次数
+ *  东财优先，失败回退新浪（东财被限流时新浪仍可用）
+ */
 async function fetchStockDailyKline(symbol: string, lmt = 30): Promise<
   { date: string; open: number; close: number; high: number; low: number; volume: number }[]
 > {
-  const url =
-    `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${secidOf(symbol)}` +
-    `&klt=101&fqt=0&lmt=${lmt}&end=20500101&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56`
-  const json = await fetchJson<{ data?: { klines?: string[] } }>(url)
-  const rows = json?.data?.klines ?? []
-  return rows.map((r) => {
-    const p = r.split(',')
-    return {
-      date: p[0],
-      open: Number(p[1]),
-      close: Number(p[2]),
-      high: Number(p[3]),
-      low: Number(p[4]),
-      volume: Number(p[5] || 0),
+  try {
+    const url =
+      `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${secidOf(symbol)}` +
+      `&klt=101&fqt=0&lmt=${lmt}&end=20500101&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56`
+    const json = await fetchJson<{ data?: { klines?: string[] } }>(url)
+    const rows = json?.data?.klines ?? []
+    if (rows.length >= 2) {
+      return rows.map((r) => {
+        const p = r.split(',')
+        return {
+          date: p[0],
+          open: Number(p[1]),
+          close: Number(p[2]),
+          high: Number(p[3]),
+          low: Number(p[4]),
+          volume: Number(p[5] || 0),
+        }
+      })
     }
-  })
+  } catch {
+    // 落到新浪
+  }
+  return fetchKlineSina(symbol, lmt)
 }
 
 /** 判定某日是否涨停：当日收盘价 >= 当日涨停价 - 0.05（与首板判定一致的容差）
@@ -620,7 +892,10 @@ async function calcStockBoardTimes(
       if (isBarLimitUp(prev.close, cur.close, item.code)) times++
     }
     // 把今日也纳入：今日已封板，应算 1 次
-    if (item.sealedAmt && item.sealedAmt > 0) times++
+    // 新浪无封单额，改用「现价 == 最高价」判定今日是否封板
+    const sealedToday =
+      (item.sealedAmt ?? 0) > 0 || (item.high > 0 && Math.abs(item.price - item.high) < 1e-6)
+    if (sealedToday) times++
     return { times, bars: bars.length }
   } catch {
     // 日 K 拉不到时降级：只算今日
@@ -670,7 +945,10 @@ async function fetchAnalysis(): Promise<ZtAnalysisResponse> {
   const total = items.length
   const firstBoard = items.filter((i) => i.isFirstBoard).length
   const consecutive = total - firstBoard
-  const sealed = items.filter((i) => (i.sealedAmt ?? 0) > 0).length
+  // 封板判定：优先用封单金额（东财口径），新浪无封单额时退化为「现价 == 最高价」
+  const sealed = items.filter(
+    (i) => (i.sealedAmt ?? 0) > 0 || (i.high > 0 && Math.abs(i.price - i.high) < 1e-6),
+  ).length
   const sealedRate = total ? sealed / total : 0
   const totalSealedAmt = items.reduce((a, b) => a + (b.sealedAmt ?? 0), 0)
   const totalMainNet = items.reduce((a, b) => a + (b.mainNet ?? 0), 0)
@@ -743,9 +1021,14 @@ async function fetchAnalysis(): Promise<ZtAnalysisResponse> {
     .slice(0, 10)
 
   // ===== 涨停次数 Top 10（近 30 日 K） =====
-  // 受限流保护：MAX_CONCURRENCY=4 已经在 fetchOutbound 守护
+  // 每只需单独拉一次日 K，全量统计太慢（53 只约 150s）。
+  // 只对涨幅前 20 只统计——足够产出 Top 10，且把耗时压到 1/3 以内。
+  // 并发由 fetchOutbound 的 MAX_CONCURRENCY 守护。
+  const timesCandidates = [...items]
+    .sort((a, b) => b.changePct - a.changePct)
+    .slice(0, 20)
   const boardTimesResults = await Promise.allSettled(
-    items.map(async (it) => {
+    timesCandidates.map(async (it) => {
       const { times } = await calcStockBoardTimes(it)
       return {
         name: it.name,
@@ -761,8 +1044,10 @@ async function fetchAnalysis(): Promise<ZtAnalysisResponse> {
     name: string; symbol: string; code: string; boardTimes: number
     todayChangePct: number; industry: string | null
   }
+  // 注意：map 返回字段是 boardTimes（不是 times），filter 必须用同一字段名，
+// 否则 undefined > 1 恒为 false，会把全部结果过滤掉
   const topBoardTimes: BoardTimesRow[] = boardTimesResults
-    .filter((r) => r.status === 'fulfilled' && r.value.times > 1)
+    .filter((r) => r.status === 'fulfilled' && r.value.boardTimes > 1)
     .map((r) => (r as PromiseFulfilledResult<BoardTimesRow>).value)
     .sort((a, b) => b.boardTimes - a.boardTimes)
     .slice(0, 10)
