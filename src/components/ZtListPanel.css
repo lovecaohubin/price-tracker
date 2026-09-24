@@ -28,6 +28,14 @@
   min-width: 0;
 }
 
+/* 右侧操作区：下次定时文字 + 数据更新按钮（按钮在最右） */
+.zt-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .zt-head h3 {
   font-size: 15px;
   font-weight: 700;
@@ -322,9 +330,6 @@
   color: var(--text-3);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  padding: 0 2px;
 }
 
 .zt-note {

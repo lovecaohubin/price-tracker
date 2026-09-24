@@ -25,6 +25,14 @@
   min-width: 0;
 }
 
+/* 右侧操作区：下次定时文字 + 数据更新按钮（按钮在最右） */
+.zt-anly-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .zt-anly-head h3 {
   font-size: 15px;
   font-weight: 700;
@@ -137,7 +145,7 @@
   font-size: 10.5px;
   color: var(--text-3);
   font-variant-numeric: tabular-nums;
-  padding: 0 2px;
+  white-space: nowrap;
 }
 
 .zt-anly-error {

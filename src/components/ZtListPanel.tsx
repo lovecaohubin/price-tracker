@@ -148,23 +148,24 @@ export default function ZtListPanel({ showDetail = true }: Props) {
             <span className="zt-subtitle">更新 {fetchedTime}</span>
           )}
         </div>
-        <button
-          className={`zt-btn-refresh${loading ? ' is-loading' : ''}`}
-          onClick={() => void loadList()}
-          disabled={loading}
-          title="手动拉取今日涨停股池数据"
-        >
-          <span className="zt-btn-icon" aria-hidden="true">⟳</span>
-          <span>数据更新</span>
-          {loading && <span className="zt-btn-loading-dot" />}
-        </button>
-      </div>
-
-      {nextSchedule && (
-        <div className="zt-next-tick">
-          下次定时 {nextSchedule.toLocaleTimeString('zh-CN', { hour12: false })}
+        <div className="zt-head-actions">
+          {nextSchedule && (
+            <span className="zt-next-tick">
+              下次定时 {nextSchedule.toLocaleTimeString('zh-CN', { hour12: false })}
+            </span>
+          )}
+          <button
+            className={`zt-btn-refresh${loading ? ' is-loading' : ''}`}
+            onClick={() => void loadList()}
+            disabled={loading}
+            title="手动拉取今日涨停股池数据"
+          >
+            <span className="zt-btn-icon" aria-hidden="true">⟳</span>
+            <span>数据更新</span>
+            {loading && <span className="zt-btn-loading-dot" />}
+          </button>
         </div>
-      )}
+      </div>
 
       <div className="zt-tabs">
         <button

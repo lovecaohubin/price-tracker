@@ -66,23 +66,24 @@ export default function ZtAnalysisPanel() {
             </span>
           )}
         </div>
-        <button
-          className={`zt-anly-refresh${loading ? ' is-loading' : ''}`}
-          onClick={() => void load()}
-          disabled={loading}
-          title="手动拉取涨停分析数据"
-          aria-label="数据更新"
-        >
-          <span className="zt-anly-icon" aria-hidden="true">⟳</span>
-          <span>数据更新</span>
-        </button>
-      </div>
-
-      {nextSchedule && (
-        <div className="zt-anly-next">
-          下次定时 {nextSchedule.toLocaleTimeString('zh-CN', { hour12: false })}
+        <div className="zt-anly-head-actions">
+          {nextSchedule && (
+            <span className="zt-anly-next">
+              下次定时 {nextSchedule.toLocaleTimeString('zh-CN', { hour12: false })}
+            </span>
+          )}
+          <button
+            className={`zt-anly-refresh${loading ? ' is-loading' : ''}`}
+            onClick={() => void load()}
+            disabled={loading}
+            title="手动拉取涨停分析数据"
+            aria-label="数据更新"
+          >
+            <span className="zt-anly-icon" aria-hidden="true">⟳</span>
+            <span>数据更新</span>
+          </button>
         </div>
-      )}
+      </div>
 
       {/* 分段切换 */}
       <div className="zt-anly-tabs">
