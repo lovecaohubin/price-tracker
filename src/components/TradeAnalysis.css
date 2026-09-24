@@ -368,6 +368,22 @@
   font-weight: 600;
 }
 
+/* 成交列：低于均值绿 / 高于均值橙 / 大于 25000 亿深红（天量） */
+.trade-table td.turnover-low {
+  color: #16a34a;
+  font-weight: 600;
+}
+
+.trade-table td.turnover-high {
+  color: #ea580c;
+  font-weight: 600;
+}
+
+.trade-table td.turnover-huge {
+  color: #991b1b;
+  font-weight: 700;
+}
+
 /* 建议仓位列：按档位着色，越激进越红 */
 .trade-table td.col-advice {
   font-weight: 600;

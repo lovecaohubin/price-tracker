@@ -55,6 +55,31 @@ const fmtPctSigned = (v: number | null | undefined, digits = 2) =>
 const pnlClass = (v: number | null | undefined) =>
   v == null || v === 0 ? '' : v > 0 ? 'up' : 'down';
 
+// 「天量」绝对阈值：两市成交额 > 25000 亿
+const TURNOVER_HUGE = 25000;
+
+// 成交量标色：> 25000 亿 深红（天量）；> 均值 橙（放量）；< 均值 绿（缩量）
+const turnoverClass = (v: number | null | undefined, avg: number | null) => {
+  if (v == null) return '';
+  if (v > TURNOVER_HUGE) return 'turnover-huge';
+  if (avg == null) return '';
+  if (v > avg) return 'turnover-high';
+  if (v < avg) return 'turnover-low';
+  return '';
+};
+
+// 成交量单元格悬浮说明
+const turnoverTip = (v: number | null | undefined, avg: number | null) => {
+  if (v == null) return undefined;
+  if (avg == null) return `成交量 ${Math.round(v).toLocaleString('zh-CN')} 亿（暂无均值基准）`;
+  const diff = ((v - avg) / avg) * 100;
+  return (
+    `成交量 ${Math.round(v).toLocaleString('zh-CN')} 亿\n` +
+    `均值 ${Math.round(avg).toLocaleString('zh-CN')} 亿（${diff >= 0 ? '+' : ''}${diff.toFixed(1)}%）\n` +
+    (v > TURNOVER_HUGE ? '天量（> 25000 亿）' : v > avg ? '高于均值' : '低于均值')
+  );
+};
+
 // 建议仓位单元格：区间文本 + 悬浮说明（评分与逐项依据）
 // 置信度不足时模型本来就没有表态，这里显示「数据不足」而不是硬凑一个区间
 const adviceRangeText = (adv?: PositionAdvice) => {
@@ -302,7 +327,16 @@ function TradeAnalysis() {
     return matched.slice().reverse();
   }, [records, keyword]);
 
-  // 上证指数标色：相对上一条记录，上涨且突破整百/整千关口 → 红；下跌且跌破整百/整千关口 → 绿
+  // 成交量标色基准：当前筛选列表的均值；「天量」绝对阈值 25000 亿（两市成交额口径）
+const turnoverAvg = useMemo(() => {
+  const vals = listDesc
+    .map(r => r.turnover)
+    .filter((v): v is number => v != null);
+  if (!vals.length) return null;
+  return vals.reduce((a, b) => a + b, 0) / vals.length;
+}, [listDesc]);
+
+// 上证指数标色：相对上一条记录，上涨且突破整百/整千关口 → 红；下跌且跌破整百/整千关口 → 绿
   const sseBreaks = useMemo(() => {
     const map = new Map<string, 'up' | 'down'>();
     let prev: number | null = null;
@@ -582,7 +616,7 @@ function TradeAnalysis() {
                 <th>盈亏比</th>
                 <th>仓位</th>
                 <th title="按当日大盘、主力资金、量价配合与账户状态推导的次日目标仓位区间（悬浮查看评分依据）">建议仓位</th>
-                <th>成交量</th>
+                <th title="两市成交额（亿元）：低于均值为绿色，高于均值为橙色，大于 25000 亿为深红色（天量）">成交量</th>
                 <th>涨幅</th>
                 <th>主力资金</th>
                 <th title="较上一条记录上涨并突破整百/整千关口显示红色，下跌并跌破整百/整千关口显示绿色">上证指数</th>
@@ -608,7 +642,12 @@ function TradeAnalysis() {
                     >
                       {adviceRangeText(adviceMap.get(r.id))}
                     </td>
-                    <td>{fmtMoney(r.turnover)}</td>
+                    <td
+                      className={turnoverClass(r.turnover, turnoverAvg)}
+                      title={turnoverTip(r.turnover, turnoverAvg)}
+                    >
+                      {fmtMoney(r.turnover)}
+                    </td>
                     <td className={pnlClass(r.changePct)}>{fmtPctSigned(r.changePct)}</td>
                     <td className={pnlClass(r.mainCapital)}>{fmtSigned(r.mainCapital)}</td>
                     <td className={sseBreaks.get(r.id) ?? ''}>
