@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { ZtAnalysisResponse } from '../types'
+import type { ZtAnalysisResponse, ZtListItem } from '../types'
 import { fetchZtAnalysis } from '../services/ztApi'
 import { useDailyScheduler } from '../hooks/useDailyScheduler'
 import './ZtAnalysisPanel.css'
@@ -295,13 +295,29 @@ function HeightSection({
   )
 }
 
-// ===== 4. 个股排行 =====
+// ===== 4. 个股排行（3 个指标横排：封单金额 / 换手率 / 主力净流入） =====
 function RankSection({ data }: { data: ZtAnalysisResponse }) {
-  const sections = [
-    { title: '封单金额 Top 10', rows: data.topSealed, value: (i: typeof data.topSealed[number]) => yiAbs(i.sealedAmt), strong: (i: typeof data.topSealed[number]) => (i.sealedAmt ?? 0) > 0 },
-    { title: '涨幅 Top 10', rows: data.topGainers, value: (i: typeof data.topGainers[number]) => pct(i.changePct), strong: () => true },
-    { title: '换手率 Top 10', rows: data.topTurnover, value: (i: typeof data.topTurnover[number]) => i.turnoverRate != null ? `${i.turnoverRate.toFixed(2)}%` : '—', strong: () => true },
-    { title: '主力净流入 Top 10', rows: data.topMainNet, value: (i: typeof data.topMainNet[number]) => yi(i.mainNet), strong: () => true },
+  // 金额类统一为「亿」；换手率为百分比
+  const sections: {
+    title: string
+    rows: ZtListItem[]
+    value: (i: ZtListItem) => string
+  }[] = [
+    {
+      title: '封单金额 Top 10（亿）',
+      rows: data.topSealed,
+      value: (i) => yiAbs(i.sealedAmt),
+    },
+    {
+      title: '换手率 Top 10',
+      rows: data.topTurnover,
+      value: (i) => (i.turnoverRate != null ? `${i.turnoverRate.toFixed(2)}%` : '—'),
+    },
+    {
+      title: '主力净流入 Top 10（亿）',
+      rows: data.topMainNet,
+      value: (i) => yi(i.mainNet),
+    },
   ]
   return (
     <div className="zt-anly-rank">

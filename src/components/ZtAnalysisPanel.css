@@ -563,11 +563,12 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* ===== 个股排行 ===== */
+/* ===== 个股排行：3 个指标横排一行 ===== */
 .zt-anly-rank {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
+  align-items: start;
 }
 
 .zt-anly-rank-block {
@@ -575,6 +576,7 @@
   border-radius: 10px;
   padding: 8px 10px;
   background: #fff;
+  min-width: 0;
 }
 
 .zt-anly-rank-title {
@@ -582,6 +584,9 @@
   font-weight: 700;
   color: var(--text-1);
   margin-bottom: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .zt-anly-rank-list {
@@ -639,5 +644,16 @@
 
   .zt-anly-grid {
     grid-template-columns: 1fr 1fr;
+  }
+
+  /* 面板转窄：3 个排行指标改上下堆叠，避免列宽过窄 */
+  .zt-anly-rank {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .zt-anly-rank {
+    grid-template-columns: 1fr;
   }
 }
