@@ -1,0 +1,33 @@
+/* ===== 首版涨停独立 Tab 页 ===== */
+/* 全宽布局；不再 sticky（独立页面靠滚动） */
+.zt-page {
+  max-width: 1180px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* 全宽时面板不再 sticky，避免右侧栏高度限制；让列表/详情按内容撑开 */
+.zt-page .zt-panel {
+  position: static;
+  max-height: none;
+}
+
+.zt-page .zt-list {
+  /* 全宽列表可读性更好，给一个明确的最大高度让滚动条出现 */
+  max-height: 640px;
+  overflow-y: auto;
+}
+
+.zt-page .zt-detail {
+  max-height: 720px;
+  overflow-y: auto;
+}
+
+@media (max-width: 720px) {
+  .zt-page .zt-list,
+  .zt-page .zt-detail {
+    max-height: none;
+  }
+}

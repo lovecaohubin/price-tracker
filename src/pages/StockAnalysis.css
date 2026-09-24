@@ -1,32 +1,7 @@
 /* ===== 股票分析页 ===== */
 .sa-root {
-  max-width: 1380px;
+  max-width: 980px;
   margin: 0 auto;
-}
-
-/* 双栏布局：左侧主内容 + 右侧首版涨停面板 */
-.sa-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
-  gap: 18px;
-  align-items: start;
-}
-
-.sa-main {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-width: 0;
-}
-
-.sa-aside {
-  min-width: 0;
-}
-
-@media (max-width: 1100px) {
-  .sa-layout {
-    grid-template-columns: 1fr;
-  }
 }
 
 .sa-toolbar {

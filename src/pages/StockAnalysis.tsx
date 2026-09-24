@@ -5,7 +5,6 @@ import {
   fetchStockReportDay,
   runStockAnalysis,
 } from '../services/stockAnalysisApi'
-import ZtListPanel from '../components/ZtListPanel'
 import './StockAnalysis.css'
 
 // ===== 格式化 =====
@@ -441,74 +440,66 @@ export default function StockAnalysis() {
 
   return (
     <div className="sa-root">
-      <div className="sa-layout">
-        <div className="sa-main">
-          <div className="sa-toolbar">
-            <div className="sa-toolbar-left">
-              <h3 className="sa-title">股票分析</h3>
-              {summary && <span className="sa-summary">{summary}</span>}
-            </div>
-            <div className="sa-toolbar-right">
-              <select
-                className="sa-date-select"
-                value={selected}
-                onChange={(e) => void pickDate(e.target.value)}
-                disabled={loading || dates.length === 0}
-              >
-                {dates.length === 0 && <option value="">暂无报告</option>}
-                {dates.map((d) => (
-                  <option key={d} value={d}>
-                    {d}
-                  </option>
-                ))}
-              </select>
-              <button className="sa-btn-run" onClick={handleRun} disabled={running}>
-                {running ? '生成中…' : '立即生成'}
-              </button>
-            </div>
-          </div>
-
-          {day && (
-            <p className="sa-generated">
-              生成时间 {new Date(day.generatedAt).toLocaleString('zh-CN')}；每个交易日 15:01 自动生成，两融为
-              T+1 披露。
-            </p>
-          )}
-
-          {error && <div className="sa-error">{error}</div>}
-
-          {running && (
-            <div className="sa-loading">
-              正在抓取东财公开数据（行情 / 资金流 / 龙虎榜 / 两融 / 大宗 / 股东 / 技术指标），约需 10–30 秒…
-            </div>
-          )}
-
-          {loading && !day && !error && <div className="sa-loading">加载中…</div>}
-
-          {!loading && !day && !error && (
-            <div className="sa-empty">
-              <p>还没有分析报告。</p>
-              <p>
-                点击「立即生成」手动跑一次，或等交易日 15:01 自动生成（跟踪列表在「资产跟踪」页维护）。
-              </p>
-            </div>
-          )}
-
-          <div className="sa-list">
-            {day?.reports.map((r) => (
-              <ReportCard key={`${r.date}-${r.symbol}`} report={r} />
+      <div className="sa-toolbar">
+        <div className="sa-toolbar-left">
+          <h3 className="sa-title">股票分析</h3>
+          {summary && <span className="sa-summary">{summary}</span>}
+        </div>
+        <div className="sa-toolbar-right">
+          <select
+            className="sa-date-select"
+            value={selected}
+            onChange={(e) => void pickDate(e.target.value)}
+            disabled={loading || dates.length === 0}
+          >
+            {dates.length === 0 && <option value="">暂无报告</option>}
+            {dates.map((d) => (
+              <option key={d} value={d}>
+                {d}
+              </option>
             ))}
-          </div>
+          </select>
+          <button className="sa-btn-run" onClick={handleRun} disabled={running}>
+            {running ? '生成中…' : '立即生成'}
+          </button>
+        </div>
+      </div>
 
-          <p className="sa-disclaimer">
-            免责声明：以上内容基于公开数据和规则化分析，仅供参考，不构成投资建议。市场有风险，投资需谨慎。
+      {day && (
+        <p className="sa-generated">
+          生成时间 {new Date(day.generatedAt).toLocaleString('zh-CN')}；每个交易日 15:01 自动生成，两融为
+          T+1 披露。
+        </p>
+      )}
+
+      {error && <div className="sa-error">{error}</div>}
+
+      {running && (
+        <div className="sa-loading">
+          正在抓取东财公开数据（行情 / 资金流 / 龙虎榜 / 两融 / 大宗 / 股东 / 技术指标），约需 10–30 秒…
+        </div>
+      )}
+
+      {loading && !day && !error && <div className="sa-loading">加载中…</div>}
+
+      {!loading && !day && !error && (
+        <div className="sa-empty">
+          <p>还没有分析报告。</p>
+          <p>
+            点击「立即生成」手动跑一次，或等交易日 15:01 自动生成（跟踪列表在「资产跟踪」页维护）。
           </p>
         </div>
+      )}
 
-        <aside className="sa-aside">
-          <ZtListPanel />
-        </aside>
+      <div className="sa-list">
+        {day?.reports.map((r) => (
+          <ReportCard key={`${r.date}-${r.symbol}`} report={r} />
+        ))}
       </div>
+
+      <p className="sa-disclaimer">
+        免责声明：以上内容基于公开数据和规则化分析，仅供参考，不构成投资建议。市场有风险，投资需谨慎。
+      </p>
     </div>
   )
 }
