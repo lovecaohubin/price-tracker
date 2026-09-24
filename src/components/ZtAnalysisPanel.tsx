@@ -37,6 +37,10 @@ export default function ZtAnalysisPanel() {
     try {
       const r = await fetchZtAnalysis()
       setData(r)
+      // 上游降级：接口仍返回 200 但没数据，显式提示，避免静默空面板
+      if (r.stale) {
+        setError(r.note || '上游涨停股池接口暂不可用，请稍后重试')
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {

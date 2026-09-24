@@ -62,6 +62,14 @@ export default function ZtListPanel({ showDetail = true }: Props) {
       setTradeDate(r.tradeDate)
       setNote(r.note)
       setStale(r.stale ?? false)
+      // 上游降级：接口仍返回 200 但没数据。这里显式提示，避免用户点了「数据更新」
+      // 只看到空列表却不知道原因。列表照常渲染（可能为空）。
+      if (r.stale) {
+        const warn = r.note.includes('⚠️')
+          ? r.note.split('⚠️').slice(1).join('⚠️').trim()
+          : ''
+        setError(warn || '上游涨停股池接口暂不可用，请稍后重试')
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {

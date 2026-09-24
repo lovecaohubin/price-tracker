@@ -125,6 +125,9 @@ interface ListCache {
 }
 let listCache: ListCache | null = null
 const LIST_TTL_MS = 30 * 1000
+// 上游失败时的缓存时长：刻意短于正常 TTL，让用户点「数据更新」能真正重试，
+// 同时避免狂点把东财接口打爆
+const LIST_ERR_TTL_MS = 5 * 1000
 
 // ===== 数据抓取 =====
 interface RawClistRow {
@@ -325,7 +328,11 @@ async function fetchList(): Promise<ZtListResponse> {
       ? `${baseNote}\n⚠️ 上游涨停股池拉取失败（${errorMsg}），已降级返回空数据，请稍后重试`
       : baseNote,
   }
-  listCache = { resp, expireAt: Date.now() + LIST_TTL_MS }
+  // 上游失败时只缓存 5 秒，保证用户点「数据更新」能真正重新请求
+  listCache = {
+    resp,
+    expireAt: Date.now() + (errorMsg != null ? LIST_ERR_TTL_MS : LIST_TTL_MS),
+  }
   return resp
 }
 
@@ -560,6 +567,8 @@ interface AnalysisCache {
 }
 let analysisCache: AnalysisCache | null = null
 const ANALYSIS_TTL_MS = 60 * 1000 // 1 分钟缓存
+// 上游失败时同理缩短，保证重试有效
+const ANALYSIS_ERR_TTL_MS = 5 * 1000
 
 /** 单只涨停股近 30 个交易日日 K；用于统计涨停次数 */
 async function fetchStockDailyKline(symbol: string, lmt = 30): Promise<
@@ -787,7 +796,11 @@ async function fetchAnalysis(): Promise<ZtAnalysisResponse> {
     topMainNet,
     topBoardTimes,
   }
-  analysisCache = { resp, expireAt: Date.now() + ANALYSIS_TTL_MS }
+  // 上游降级（stale）时只缓存 5 秒，保证重试有效
+  analysisCache = {
+    resp,
+    expireAt: Date.now() + (resp.stale ? ANALYSIS_ERR_TTL_MS : ANALYSIS_TTL_MS),
+  }
   return resp
 }
 
