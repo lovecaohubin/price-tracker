@@ -7,28 +7,35 @@
   gap: 14px;
 }
 
-/* 双栏布局：左侧首版涨停列表 + 右侧涨停分析 */
+/* 双栏布局：左右各占一半
+ * - 列表 / 详情（左侧）和 涨停分析（右侧）密度不同，给两侧同样的 1fr 让宽度均分
+ * - 用 gap 留呼吸，align-items: start 让顶部对齐
+ */
 .zt-page-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 380px;
-  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px;
   align-items: start;
 }
 
-.zt-page-main {
+.zt-page-main,
+.zt-page-aside {
   min-width: 0;
+}
+
+.zt-page-main {
   display: flex;
   flex-direction: column;
   gap: 14px;
 }
 
 .zt-page-aside {
-  min-width: 0;
-  position: sticky;
+  /* 右侧分析面板常驻视野内；超过 1180px 才用 sticky */
+  position: static;
   top: 12px;
 }
 
-/* 全宽时让主区面板不再 sticky，便于滚动展开 */
+/* 主区面板不再 sticky，便于滚动展开 */
 .zt-page-main .zt-panel {
   position: static;
   max-height: none;
@@ -44,13 +51,14 @@
   overflow-y: auto;
 }
 
-/* 窄屏堆叠 */
+/* ===== 窄屏堆叠 ===== */
 @media (max-width: 1180px) {
   .zt-page-layout {
     grid-template-columns: 1fr;
   }
-  .zt-page-aside {
-    position: static;
+  .zt-page-main .zt-list,
+  .zt-page-main .zt-detail {
+    max-height: none;
   }
 }
 
