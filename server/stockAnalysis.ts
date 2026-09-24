@@ -22,6 +22,7 @@ import type {
   StockAnalysisStore,
   StockReport,
   StockReportDay,
+  SingleStockAnalysisResponse,
   LhbSeat,
   LhbSeatType,
 } from '../src/types'
@@ -830,6 +831,65 @@ function scheduleTick(): void {
   void triggerRun(s.symbols)
 }
 
+/**
+ * 单只股票按需分析（资产跟踪页股票分析按钮调用）
+ * 只取今日行情底色 / 资金流向 / 融资融券 三块，不走落盘、不影响 15:01 任务。
+ * 用 Promise.allSettled 并发抓，单点失败降级为 null，整体不抛错。
+ */
+async function fetchSingleStock(
+  symbol: string,
+): Promise<SingleStockAnalysisResponse> {
+  const date = ymd(new Date())
+  const [snapRes, flowRes, rzrqRes] = await Promise.allSettled([
+    fetchSnapshot(symbol),
+    fetchFlow(symbol, date),
+    fetchRzrq(symbol),
+  ])
+
+  const missing: string[] = []
+  let name = symbol
+  let quote: SingleStockAnalysisResponse['quote'] = null
+  if (snapRes.status === 'fulfilled') {
+    name = snapRes.value.name
+    quote = snapRes.value.quote
+  } else {
+    missing.push('行情底色')
+  }
+
+  let flow: SingleStockAnalysisResponse['flow'] = null
+  if (flowRes.status === 'fulfilled') {
+    flow = flowRes.value
+  } else {
+    missing.push('资金流向')
+  }
+
+  let rzrq: SingleStockAnalysisResponse['rzrq'] = null
+  if (rzrqRes.status === 'fulfilled') {
+    rzrq = rzrqRes.value
+  } else {
+    missing.push('融资融券')
+  }
+
+  return {
+    symbol,
+    name,
+    date,
+    fetchedAt: new Date().toISOString(),
+    quote,
+    flow,
+    rzrq,
+    missing,
+    sources: {
+      quote: '东方财富 push2 ulist.np 快照（行情/估值/换手/量比）',
+      flow: '东方财富 push2his fflow（日线，主力 = 超大单 + 大单，单位元）',
+      rzrq: '东方财富数据中心 RPTA_WEB_RZRQ_GGMX（T+1 披露）',
+    },
+    note:
+      '按需分析：仅取「今日行情底色」「资金流向」「融资融券」三块。' +
+      '龙虎榜 / 大宗 / 股东 / 技术指标详见「资产股票分析」每日 15:01 自动生成的报告。',
+  }
+}
+
 async function triggerRun(symbols: string[], overrideDate?: string): Promise<StockReportDay | null> {
   if (running) return null
   running = true
@@ -895,6 +955,30 @@ export function stockAnalysisPlugin(): Plugin {
         const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`)
         res.setHeader('Content-Type', 'application/json; charset=utf-8')
 
+        // 单只股票按需分析：GET /api/stockanalysis/single?code=sh603248
+        // 注意：必须先于通用 GET 分支，否则 /single 会被当成「无 date」走概览分支
+        if (req.method === 'GET' && url.pathname === '/single') {
+          const code = (url.searchParams.get('code') ?? '').toLowerCase()
+          if (!/^(sh|sz)\d{6}$/.test(code)) {
+            res.writeHead(400)
+            res.end(JSON.stringify({ error: 'code 格式错误（应如 sh603248）' }))
+            return
+          }
+          try {
+            const r = await fetchSingleStock(code)
+            res.end(JSON.stringify(r))
+          } catch (err) {
+            console.error('[股票分析] 单只按需分析出错:', err)
+            res.writeHead(500)
+            res.end(
+              JSON.stringify({
+                error: err instanceof Error ? err.message : String(err),
+              }),
+            )
+          }
+          return
+        }
+
         // GET：?date=YYYY-MM-DD 返回当日报告；无参数返回全部概览
         if (req.method === 'GET') {
           const s = await loadStore()
@@ -937,6 +1021,9 @@ export function stockAnalysisPlugin(): Plugin {
           }
           return
         }
+
+        // 单只股票按需分析：GET /api/stockanalysis/single?code=sh603248
+        // （路由分支已前置到本块最上方，避免被通用 GET 拦截）
 
         // POST：手动触发生成（body 可选 { symbols?: string[], date?: 'YYYY-MM-DD' }）
         if (req.method === 'POST') {

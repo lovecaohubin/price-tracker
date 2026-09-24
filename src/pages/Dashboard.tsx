@@ -11,6 +11,7 @@ import PriceChart from '../components/PriceChart';
 import TradeAnalysis from '../components/TradeAnalysis';
 import HoldAdviceBacktest from '../components/HoldAdviceBacktest';
 import StockAnalysis from './StockAnalysis';
+import SingleStockAnalysisModal from '../components/SingleStockAnalysisModal';
 import ZtPage from './ZtPage';
 import { syncStockAnalysisSymbols } from '../services/stockAnalysisApi';
 import '../App.css';
@@ -76,6 +77,8 @@ function Dashboard() {
   const [lastUpdate, setLastUpdate] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
+  // 按需股票分析弹窗：传入 symbol 即打开
+  const [analyzingSymbol, setAnalyzingSymbol] = useState<string | null>(null);
   const [activeSection, setActiveSection] = useState<'assets' | 'analysis' | 'stock' | 'zt'>('assets');
   // 持仓股数：代码 -> 股数（独立于行情，避免刷新时被覆盖）
   const [shares, setShares] = useState<Record<string, number>>(() => loadShares());
@@ -338,6 +341,7 @@ function Dashboard() {
                         selectedAsset?.id === asset.id ? null : asset
                       )}
                       onDelete={() => handleDelete(asset.id)}
+                      onAnalyze={() => setAnalyzingSymbol(asset.symbol)}
                     />
                   ))}
                   {assets.length === 0 && (
@@ -372,6 +376,13 @@ function Dashboard() {
           </>
         )}
       </main>
+
+      {/* 单只股票按需分析弹窗（A 股）：行情底色 / 资金流向 / 融资融券 */}
+      <SingleStockAnalysisModal
+        symbol={analyzingSymbol}
+        name={analyzingSymbol ? assets.find(a => a.symbol === analyzingSymbol)?.name ?? analyzingSymbol : ''}
+        onClose={() => setAnalyzingSymbol(null)}
+      />
     </div>
   );
 }

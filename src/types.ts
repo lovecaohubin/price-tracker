@@ -166,6 +166,30 @@ export interface StockReportDay {
   reports: StockReport[];
 }
 
+/** 单只股票按需分析（资产跟踪页股票分析按钮触发的精简数据）
+ *  - 不走 15:01 自动落盘，直接调快照 + 资金流 + 两融接口
+ *  - 只返回今日行情底色 / 资金流向 / 融资融券 三块
+ */
+export interface SingleStockAnalysisResponse {
+  symbol: string;
+  name: string;
+  /** 报告日期 YYYY-MM-DD（资金流按此日期定位） */
+  date: string;
+  /** 拉取时间（ISO） */
+  fetchedAt: string;
+  /** 一、今日行情底色（来自 ulist 快照） */
+  quote: StockReportQuote | null;
+  /** 二、资金流向（来自 fflow） */
+  flow: StockReportFlow | null;
+  /** 四、融资融券（T+1 披露，来自 RZRQ） */
+  rzrq: StockReportRzrq | null;
+  /** 取数失败的板块名（前端提示用） */
+  missing: string[];
+  /** 各板块数据源标注 */
+  sources: { quote: string; flow: string; rzrq: string };
+  note: string;
+}
+
 /** 服务端落盘的存储结构（data/stockAnalysis.json） */
 export interface StockAnalysisStore {
   savedAt: number;

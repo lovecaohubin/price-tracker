@@ -39,9 +39,10 @@ server/
 4. **分类筛选**: 按股票/加密货币切换视图
 5. **添加/删除资产**: 从可选列表中添加新资产或移除已有资产
 6. **价格走势图**: 点击资产卡片查看近30天价格折线图
-7. **持有建议**: 每张资产卡片给出「强势持有 / 持有 / 观望 / 减仓 / 回避」档位与一句话动作（`services/holdAdvice.ts`）
-8. **持有建议的模型验证**: 资产跟踪页底部可展开的逐日滚动回测面板，检验档位是否真的对应更好的后续表现（`components/HoldAdviceBacktest.tsx`）
-9. **首版涨停**: 导航栏独立 Tab（资产股票分析之后），按涨幅排序的全市场涨停股池，本地判定首板/连板，列表显示价格 / 行业 / 成交量 / 主力资金；点击展开龙虎榜 / 资金流 / 两融 / 大宗交易等详情。Tab 内双栏：左侧涨停股池 + 详情，右侧涨停分析面板（潮汐指数 / 行业统计 / 涨停高度 / 个股排行 / 涨停次数）（`pages/ZtPage.tsx` + `components/ZtListPanel.tsx` + `components/ZtAnalysisPanel.tsx`）
+7. **按需股票分析按钮**: 资产跟踪页每只 A 股卡片右上角「股票分析」按钮（hover 显示），点击弹出模态框按需生成该股的「今日行情底色」「资金流向」「融资融券（T+1 披露）」三块数据，1-3 秒响应，不走 15:01 自动落盘。弹窗含数据源 / 口径标注（`components/SingleStockAnalysisModal.tsx` + `services/stockAnalysisApi.fetchSingleStockAnalysis` + `server/stockAnalysis.fetchSingleStock` + 路由 `GET /api/stockanalysis/single?code=`）。
+8. **持有建议**: 每张资产卡片给出「强势持有 / 持有 / 观望 / 减仓 / 回避」档位与一句话动作（`services/holdAdvice.ts`）
+9. **持有建议的模型验证**: 资产跟踪页底部可展开的逐日滚动回测面板，检验档位是否真的对应更好的后续表现（`components/HoldAdviceBacktest.tsx`）
+10. **首版涨停**: 导航栏独立 Tab（资产股票分析之后），按涨幅排序的全市场涨停股池，本地判定首板/连板，列表显示价格 / 行业 / 成交量 / 主力资金；点击展开龙虎榜 / 资金流 / 两融 / 大宗交易等详情。Tab 内双栏：左侧涨停股池 + 详情，右侧涨停分析面板（潮汐指数 / 行业统计 / 涨停高度 / 个股排行 / 涨停次数）（`pages/ZtPage.tsx` + `components/ZtListPanel.tsx` + `components/ZtAnalysisPanel.tsx`）
 
 ## 建议模型
 两个互补模型，都不预测涨跌，只做强弱与风险刻度：

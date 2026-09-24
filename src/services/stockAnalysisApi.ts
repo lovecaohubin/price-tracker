@@ -1,11 +1,15 @@
 /**
  * 股票分析模块 API（服务端 /api/stockanalysis）
- * - GET  无参：概览（可用日期列表 + 最新一日报告）
- * - GET  ?date=：指定日期报告
- * - PUT  ：同步跟踪列表（symbols）
- * - POST ：手动触发生成（抓取东财公开数据，约 10-30 秒）
+ * - GET    无参：概览（可用日期列表 + 最新一日报告）
+ * - GET    ?date=：指定日期报告
+ * - GET    /single?code=：单只股票按需分析（行情/资金/两融）
+ * - PUT    ：同步跟踪列表（symbols）
+ * - POST   ：手动触发生成（抓取东财公开数据，约 10-30 秒）
  */
-import type { StockReportDay } from '../types'
+import type {
+  StockReportDay,
+  SingleStockAnalysisResponse,
+} from '../types'
 
 export interface StockAnalysisOverview {
   symbols: string[]
@@ -55,5 +59,17 @@ export async function runStockAnalysis(symbols?: string[]): Promise<StockReportD
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(symbols ? { symbols } : {}),
     }),
+  )
+}
+
+/**
+ * 单只股票按需分析（资产跟踪页股票分析按钮触发）。
+ * 只取今日行情底色 / 资金流向 / 融资融券 三块，约 1-3 秒。
+ */
+export async function fetchSingleStockAnalysis(
+  code: string,
+): Promise<SingleStockAnalysisResponse> {
+  return parseOrThrow<SingleStockAnalysisResponse>(
+    await fetch(`/api/stockanalysis/single?code=${encodeURIComponent(code)}`),
   )
 }

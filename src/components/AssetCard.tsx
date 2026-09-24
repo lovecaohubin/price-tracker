@@ -19,6 +19,8 @@ interface Props {
   onSharesChange: (shares: number) => void;
   onSelect: () => void;
   onDelete: () => void;
+  /** 股票类型才有的"股票分析"按钮回调（A 股）；其它资产不显示 */
+  onAnalyze?: () => void;
 }
 
 // 悬浮说明：档位 + 评分 + 置信度 + 动作 + 逐项依据
@@ -31,7 +33,7 @@ function adviceTip(advice: HoldAdvice): string {
   );
 }
 
-function AssetCard({ asset, advice, isSelected, shares, onSharesChange, onSelect, onDelete }: Props) {
+function AssetCard({ asset, advice, isSelected, shares, onSharesChange, onSelect, onDelete, onAnalyze }: Props) {
   const safe52W = asset.high52Week || 1;
   const safeATH = asset.allTimeHigh || 1;
   const gap52W = ((safe52W - asset.currentPrice) / safe52W) * 100;
@@ -89,11 +91,23 @@ function AssetCard({ asset, advice, isSelected, shares, onSharesChange, onSelect
             <span className="asset-symbol">{asset.symbol}</span>
           </div>
         </div>
-        <button
-          className="btn-delete"
-          onClick={(e) => { e.stopPropagation(); onDelete(); }}
-          title="删除"
-        >✕</button>
+        <div className="card-top-right">
+          {/* 仅 A 股显示「股票分析」按钮（按需分析当日行情/资金/两融） */}
+          {onAnalyze && asset.type === 'stock' && (
+            <button
+              className="btn-analyze"
+              onClick={(e) => { e.stopPropagation(); onAnalyze() }}
+              title="股票分析：行情底色 / 资金流向 / 融资融券"
+            >
+              股票分析
+            </button>
+          )}
+          <button
+            className="btn-delete"
+            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+            title="删除"
+          >✕</button>
+        </div>
       </div>
 
       {/* 名称下方：股数（可录入）+ 金额（= 股数 × 股价） */}
