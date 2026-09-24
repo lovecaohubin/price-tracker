@@ -261,6 +261,14 @@
   color: #b91c1c;
 }
 
+.zt-empty-hint {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 10.5px;
+  color: var(--text-3);
+  line-height: 1.6;
+}
+
 .zt-note {
   font-size: 10.5px;
   color: var(--text-3);

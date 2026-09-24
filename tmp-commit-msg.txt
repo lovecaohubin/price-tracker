@@ -1,0 +1,16 @@
+fix: 首板涨停接口降级 + 前端空状态区分
+
+问题：东财接口被 CDN 限流或网络层连接重置时，fetchZtPool 失败导致
+/api/zt/list 直接返回 500，前端只能看到红色 error 提示。
+
+修复：
+- server/zt.ts：fetchZtPool 抓取失败时不再抛错，返回空 rows + errorMsg；
+  fetchList 把 errorMsg 透传为 stale=true + note 警告，仍返回 200
+- server/zt.ts：fetchAnalysis 正常路径下把 list.stale 透传到响应，
+  ZtAnalysisPanel 显示「接口降级」黄色标记
+- ZtListPanel.tsx：新增 stale state，空列表分支识别 stale，
+  显示「接口暂不可用（涨停股池拉取失败），请稍后重试」而非
+  「今日暂无涨停」
+- ZtListPanel.css：zt-empty-hint 样式
+
+这样即使上游断网也能正常 200 返回，前端能区分"接口不可用"与"今日真无涨停"。

@@ -135,10 +135,14 @@ interface RawClistRow {
   f60?: number; f62?: number; f100?: string
 }
 
-/** 拉涨停股池（涨幅 >= 10%，取前 60 条；f3 == 1999 / 1099 等为涨停） */
+/** 拉涨停股池（涨幅 >= 10%，取前 60 条；f3 == 1999 / 1099 等为涨停）
+ *  抓取失败时降级返回空 rows（不抛错），让 /api/zt/list 返回 200 + 空数据，
+ *  前端可显示"今日暂无涨停 / 接口暂不可用"，而不是整页 error
+ */
 async function fetchZtPool(): Promise<{
   rows: { row: RawClistRow; symbol: string; prevClose: number; changePct: number }[]
   tradeDate: string
+  errorMsg: string | null
 }> {
   // push2 在本地出口对瞬时高并发不稳定，改用 push2his 历史镜像（实测更稳定）
   const url =
@@ -148,9 +152,16 @@ async function fetchZtPool(): Promise<{
     'm:1+t:2+f:!2,m:1+t:23+f:!2,m:0+t:7+f:!2,m:1+t:12+f:!2&' +
     'fields=f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,f13,f14,f15,f16,f17,f18,f20,' +
     'f24,f25,f26,f37,f39,f40,f60,f62,f100'
-  const json = await fetchJson<{
-    data?: { diff?: Record<string, RawClistRow> | RawClistRow[] }
-  }>(url)
+  let json: { data?: { diff?: Record<string, RawClistRow> | RawClistRow[] } } | null = null
+  let errorMsg: string | null = null
+  try {
+    json = await fetchJson<{
+      data?: { diff?: Record<string, RawClistRow> | RawClistRow[] }
+    }>(url)
+  } catch (e) {
+    errorMsg = e instanceof Error ? e.message : String(e)
+    console.error('[首版涨停] 涨停股池拉取失败:', errorMsg)
+  }
   const diffField = json?.data?.diff
   const raw: RawClistRow[] = Array.isArray(diffField)
     ? diffField
@@ -183,7 +194,7 @@ async function fetchZtPool(): Promise<{
 
   // 行情快照日期（取涨停股池返回的 f26 不一定是交易日，我们用日 K 线最新一根确认）
   const tradeDate = ymd(new Date())
-  return { rows, tradeDate }
+  return { rows, tradeDate, errorMsg }
 }
 
 /** 拉个股最近 2 根日 K 线，用于首板判定 */
@@ -269,7 +280,7 @@ function rowToListItem(
 async function fetchList(): Promise<ZtListResponse> {
   if (listCache && listCache.expireAt > Date.now()) return listCache.resp
 
-  const { rows, tradeDate } = await fetchZtPool()
+  const { rows, tradeDate, errorMsg } = await fetchZtPool()
 
   // 并发拉日K + 判定首板
   const items: ZtListItem[] = []
@@ -299,15 +310,20 @@ async function fetchList(): Promise<ZtListResponse> {
 
   const firstBoard = items.filter((i) => i.isFirstBoard)
 
+  const baseNote =
+    '数据源：东方财富 push2 clist 涨停股池（按涨幅排序）+' +
+    '日K本地判定首板。f2==f15 且已达涨停价 ⇒ 已封板；与昨日对比昨日是否涨停 ⇒ 区分首板/连板。' +
+    '北交所/创业板/科创板涨跌停阈值不同，已分别处理。'
+
   const resp: ZtListResponse = {
     items,
     firstBoard,
     fetchedAt: new Date().toISOString(),
     tradeDate,
-    note:
-      '数据源：东方财富 push2 clist 涨停股池（按涨幅排序）+' +
-      '日K本地判定首板。f2==f15 且已达涨停价 ⇒ 已封板；与昨日对比昨日是否涨停 ⇒ 区分首板/连板。' +
-      '北交所/创业板/科创板涨跌停阈值不同，已分别处理。',
+    stale: errorMsg != null,
+    note: errorMsg
+      ? `${baseNote}\n⚠️ 上游涨停股池拉取失败（${errorMsg}），已降级返回空数据，请稍后重试`
+      : baseNote,
   }
   listCache = { resp, expireAt: Date.now() + LIST_TTL_MS }
   return resp
@@ -745,6 +761,7 @@ async function fetchAnalysis(): Promise<ZtAnalysisResponse> {
   const resp: ZtAnalysisResponse = {
     fetchedAt: new Date().toISOString(),
     tradeDate: list.tradeDate,
+    stale: list.stale ?? false,
     note:
       '行业 / 高度 / 排行均基于当日涨停股池聚合；' +
       '涨停次数 = 近 30 个交易日内"收盘价触及涨停价"的次数（含今日）。' +

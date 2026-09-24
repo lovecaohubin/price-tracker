@@ -119,6 +119,23 @@
   margin: 0;
 }
 
+.zt-anly-note.is-stale {
+  background: #fef3c7;
+  border-color: #fde68a;
+  color: #92400e;
+}
+
+.zt-anly-stale-tag {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  margin-right: 6px;
+  border-radius: 4px;
+  background: #b91c1c;
+  color: #fff;
+}
+
 /* ===== Metric：潮汐指标 ===== */
 .zt-anly-metric {
   display: flex;

@@ -39,6 +39,7 @@ export default function ZtListPanel({ showDetail = true }: Props) {
   const [fetchedAt, setFetchedAt] = useState('')
   const [tradeDate, setTradeDate] = useState('')
   const [note, setNote] = useState('')
+  const [stale, setStale] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [tab, setTab] = useState<Tab>('first')
@@ -59,6 +60,7 @@ export default function ZtListPanel({ showDetail = true }: Props) {
       setFetchedAt(r.fetchedAt)
       setTradeDate(r.tradeDate)
       setNote(r.note)
+      setStale(r.stale ?? false)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -183,9 +185,17 @@ export default function ZtListPanel({ showDetail = true }: Props) {
       {loading && !list.length && <div className="zt-loading">加载涨停股池…</div>}
       {error && <div className="zt-error">{error}</div>}
       {!loading && !error && !sortedItems.length && (
-        <div className="zt-empty">
-          今日暂无{tab === 'first' ? '首板涨停' : '涨停'}股票（盘后或非交易日）。
-        </div>
+        stale ? (
+          <div className="zt-empty">
+            接口暂不可用（涨停股池拉取失败），请稍后重试。
+            <br />
+            <span className="zt-empty-hint">网络层常见原因：东财 CDN 临时限流 / 本地出口被连接重置。</span>
+          </div>
+        ) : (
+          <div className="zt-empty">
+            今日暂无{tab === 'first' ? '首板涨停' : '涨停'}股票（盘后或非交易日）。
+          </div>
+        )
       )}
 
       <ul className="zt-list">

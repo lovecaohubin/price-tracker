@@ -113,7 +113,8 @@ export default function ZtAnalysisPanel() {
       )}
 
       {data && (
-        <p className="zt-anly-note">
+        <p className={`zt-anly-note${data.stale ? ' is-stale' : ''}`}>
+          {data.stale && <strong className="zt-anly-stale-tag">接口降级</strong>}
           数据源：{data.note}
         </p>
       )}
