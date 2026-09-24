@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ZtListItem, ZtDetailResponse } from '../types'
 import { fetchZtList, fetchZtDetail } from '../services/ztApi'
+import { useDailyScheduler } from '../hooks/useDailyScheduler'
 import './ZtListPanel.css'
 
 // ===== 格式化 =====
@@ -40,7 +41,7 @@ export default function ZtListPanel({ showDetail = true }: Props) {
   const [tradeDate, setTradeDate] = useState('')
   const [note, setNote] = useState('')
   const [stale, setStale] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [tab, setTab] = useState<Tab>('first')
 
@@ -68,12 +69,12 @@ export default function ZtListPanel({ showDetail = true }: Props) {
     }
   }, [])
 
+  // 每天 15:05 定时刷新
+  const nextSchedule = useDailyScheduler(() => void loadList(), 15, 5)
+
   useEffect(() => {
-    void loadList()
-    // 60 秒自动刷新（接口侧已 30s 缓存，前端不需要更密集）
-    const t = setInterval(() => void loadList(), 60 * 1000)
-    return () => clearInterval(t)
-  }, [loadList])
+    // 进入页面不自动刷新；用户点击「数据更新」或每日 15:05 定时触发
+  }, [])
 
   // 切换 tab 时清空选中
   useEffect(() => {
@@ -143,9 +144,27 @@ export default function ZtListPanel({ showDetail = true }: Props) {
       <div className="zt-head">
         <h3>首版涨停</h3>
         <span className="zt-subtitle">
-          {fetchedTime ? `更新 ${fetchedTime}` : ''}
+          {fetchedTime ? `更新 ${fetchedTime}` : '未刷新'}
           {tradeDate ? ` · ${tradeDate}` : ''}
         </span>
+      </div>
+
+      <div className="zt-toolbar">
+        <button
+          className={`zt-btn-refresh${loading ? ' is-loading' : ''}`}
+          onClick={() => void loadList()}
+          disabled={loading}
+          title="手动拉取今日涨停股池数据"
+        >
+          <span className="zt-btn-icon" aria-hidden="true">⟳</span>
+          <span>数据更新</span>
+          {loading && <span className="zt-btn-loading-dot" />}
+        </button>
+        {nextSchedule && (
+          <span className="zt-next-tick">
+            下次定时 {nextSchedule.toLocaleTimeString('zh-CN', { hour12: false })}
+          </span>
+        )}
       </div>
 
       <div className="zt-tabs">
@@ -185,7 +204,15 @@ export default function ZtListPanel({ showDetail = true }: Props) {
       {loading && !list.length && <div className="zt-loading">加载涨停股池…</div>}
       {error && <div className="zt-error">{error}</div>}
       {!loading && !error && !sortedItems.length && (
-        stale ? (
+        !fetchedAt ? (
+          <div className="zt-empty">
+            暂无数据，点击顶部「数据更新」拉取今日涨停股池。
+            <br />
+            <span className="zt-empty-hint">
+              每天 15:05 自动定时刷新一次；上次刷新：{fetchedTime || '—'}
+            </span>
+          </div>
+        ) : stale ? (
           <div className="zt-empty">
             接口暂不可用（涨停股池拉取失败），请稍后重试。
             <br />

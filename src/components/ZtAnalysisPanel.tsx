@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ZtAnalysisResponse } from '../types'
 import { fetchZtAnalysis } from '../services/ztApi'
+import { useDailyScheduler } from '../hooks/useDailyScheduler'
 import './ZtAnalysisPanel.css'
 
 type Section = 'metric' | 'industry' | 'height' | 'rank' | 'times'
@@ -26,7 +27,7 @@ const yiAbs = (v: number | null | undefined) =>
  */
 export default function ZtAnalysisPanel() {
   const [data, setData] = useState<ZtAnalysisResponse | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [section, setSection] = useState<Section>('metric')
 
@@ -43,17 +44,16 @@ export default function ZtAnalysisPanel() {
     }
   }, [])
 
-  useEffect(() => {
-    load()
-    // 每 60 秒自动刷新一次（与服务端缓存一致）
-    const t = setInterval(load, 60_000)
-    return () => clearInterval(t)
-  }, [load])
+  // 进入页面不自动刷新；用户点击「数据更新」或每日 15:05 定时触发
+  useDailyScheduler(() => void load(), 15, 5)
 
   const maxBoardCount = useMemo(() => {
     if (!data?.boardDistribution.length) return 0
     return data.boardDistribution.reduce((a, b) => Math.max(a, b.boardCount), 0)
   }, [data])
+
+  // 每天 15:05 定时刷新（与 ZtListPanel 同步）
+  const nextSchedule = useDailyScheduler(() => void load(), 15, 5)
 
   return (
     <div className="zt-anly-panel">
@@ -61,19 +61,28 @@ export default function ZtAnalysisPanel() {
         <div>
           <h3>涨停分析</h3>
           <span className="zt-anly-subtitle">
-            {data ? `更新于 ${new Date(data.fetchedAt).toLocaleTimeString('zh-CN')}` : '加载中…'}
+            {data
+              ? `更新于 ${new Date(data.fetchedAt).toLocaleTimeString('zh-CN', { hour12: false })}`
+              : '未刷新'}
           </span>
         </div>
         <button
-          className="zt-anly-refresh"
-          onClick={load}
+          className={`zt-anly-refresh${loading ? ' is-loading' : ''}`}
+          onClick={() => void load()}
           disabled={loading}
-          title="刷新"
-          aria-label="刷新涨停分析"
+          title="手动拉取涨停分析数据"
+          aria-label="数据更新"
         >
-          ⟳
+          <span className="zt-anly-icon" aria-hidden="true">⟳</span>
+          <span>数据更新</span>
         </button>
       </div>
+
+      {nextSchedule && (
+        <div className="zt-anly-next">
+          下次定时刷新 {nextSchedule.toLocaleTimeString('zh-CN', { hour12: false })}
+        </div>
+      )}
 
       {/* 分段切换 */}
       <div className="zt-anly-tabs">
@@ -99,6 +108,21 @@ export default function ZtAnalysisPanel() {
       {error && <div className="zt-anly-error">{error}</div>}
 
       {loading && !data && <div className="zt-anly-loading">正在聚合涨停数据…</div>}
+
+      {!loading && !data && !error && (
+        <div className="zt-anly-empty">
+          暂无数据，点击「数据更新」拉取今日涨停分析。
+          <br />
+          <span className="zt-anly-empty-hint">
+            {nextSchedule
+              ? `每天 15:05 自动定时刷新一次；下次 ${nextSchedule.toLocaleTimeString(
+                  'zh-CN',
+                  { hour12: false },
+                )}`
+              : '每天 15:05 自动定时刷新一次'}
+          </span>
+        </div>
+      )}
 
       {data && (
         <div className="zt-anly-body">
