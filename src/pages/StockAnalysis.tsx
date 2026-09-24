@@ -442,7 +442,7 @@ export default function StockAnalysis() {
     <div className="sa-root">
       <div className="sa-toolbar">
         <div className="sa-toolbar-left">
-          <h3 className="sa-title">股票分析</h3>
+          <h3 className="sa-title">资产股票分析</h3>
           {summary && <span className="sa-summary">{summary}</span>}
         </div>
         <div className="sa-toolbar-right">

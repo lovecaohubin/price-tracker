@@ -25,7 +25,7 @@ src/
     ├── AddAssetForm.tsx        # 添加资产弹窗
     ├── PriceChart.tsx          # 价格走势折线图
     ├── HoldAdviceBacktest.tsx  # 持有建议的逐日滚动回测
-    ├── ZtListPanel.tsx         # 首版涨停模块（股票分析右侧）
+    ├── ZtListPanel.tsx         # 首版涨停模块（独立 Tab）
     └── *.css                   # 对应组件的样式文件
 server/
 ├── stockAnalysis.ts            # 股票分析（vite 插件）+ /api/stockanalysis
@@ -41,7 +41,7 @@ server/
 6. **价格走势图**: 点击资产卡片查看近30天价格折线图
 7. **持有建议**: 每张资产卡片给出「强势持有 / 持有 / 观望 / 减仓 / 回避」档位与一句话动作（`services/holdAdvice.ts`）
 8. **持有建议的模型验证**: 资产跟踪页底部可展开的逐日滚动回测面板，检验档位是否真的对应更好的后续表现（`components/HoldAdviceBacktest.tsx`）
-9. **首版涨停**: 导航栏独立 Tab（股票分析之后），按涨幅排序的全市场涨停股池，本地判定首板/连板，列表显示价格 / 行业 / 成交量 / 主力资金；点击展开龙虎榜 / 资金流 / 两融 / 大宗交易等详情（`pages/ZtPage.tsx` + `components/ZtListPanel.tsx`）
+9. **首版涨停**: 导航栏独立 Tab（资产股票分析之后），按涨幅排序的全市场涨停股池，本地判定首板/连板，列表显示价格 / 行业 / 成交量 / 主力资金；点击展开龙虎榜 / 资金流 / 两融 / 大宗交易等详情（`pages/ZtPage.tsx` + `components/ZtListPanel.tsx`）
 
 ## 建议模型
 两个互补模型，都不预测涨跌，只做强弱与风险刻度：
@@ -54,7 +54,7 @@ server/
 - `server/stockAnalysis.ts`：核心服务端（vite 插件）。抓取行情快照/估值（ulist）、当日资金流（主力/超大/大/中/小单+主力净占比，fflow）、龙虎榜及全量席位明细（含外资/机构专用识别 + RISE_PROBABILITY_3DAY 3 日胜率 + 近 10 次上榜历史，RPT_DAILYBILLBOARD_DETAILSNEW 等）、融资融券（T+1 披露，RPTA_WEB_RZRQ_GGMX）、大宗交易（RPT_DATA_BLOCKTRADE）、十大流通股东（RPT_F10_EH_FREEHOLDERS），并由日 K 本地计算 RSI/KDJ/BOLL/MA。
 - 解读要点为规则引擎生成（资金派发/吸筹结构、龙虎榜与主力口径背离、两融连续净偿还、QFII 增减、超买超卖等），不做涨跌预测，报告尾部带免责声明。
 - 定时执行：dev server 常驻进程内每 30 秒检查，交易日 15:01–15:10 窗口触发（日K落库延迟自动重试），`lastRunAt` 时间戳判重；跟踪列表由前端每次变更时 `PUT /api/stockanalysis` 上报。
-- 报告落盘 `data/stockAnalysis.json`（保留最近 10 个交易日），前端「股票分析」Tab（`src/pages/StockAnalysis.tsx`）按日期查看，支持「立即生成」手动触发。
+- 报告落盘 `data/stockAnalysis.json`（保留最近 10 个交易日），前端「资产股票分析」Tab（`src/pages/StockAnalysis.tsx`）按日期查看，支持「立即生成」手动触发。
 - 接口坑备忘：`HOLD_NUM` 单位是股、`HOLD_NUM_CHANGE` 单位也是股（勿被字段名误导）；fflow 返回单位是元；龙虎榜席位明细接口（`RPT_BILLBOARD_DAILYDETAILSBUY/SELL`）的 `BUY/SELL` 单位是元，`RISE_PROBABILITY_3DAY` 是 0-100 的百分比；前端必须把数据源/方法论标注在报告里（不同数据商对「主力」「超大单」阈值定义不同）。
 
 ## 行情与缓存策略
@@ -62,7 +62,7 @@ server/
 - 个股 K 线（`/api/kline`）落盘 `data/klineHistory.json`，按 `symbol_period` 索引。非交易日 / 接口限流时同样降级读本地，响应头 `X-Kline-Cache: STALE` 标识，前端把 stale 标透传给持有建议回测面板并显示降级提示。
 
 ## 首版涨停模块（实时）
-导航栏独立 Tab（股票分析之后），无落盘，30 秒服务端内存缓存。数据源全部为东方财富公开接口（实测可用）：
+导航栏独立 Tab（资产股票分析之后），无落盘，30 秒服务端内存缓存。数据源全部为东方财富公开接口（实测可用）：
 - `server/zt.ts`：核心服务端（vite 插件）。
   - `/api/zt/list`：拉 push2his 历史镜像 clist（涨幅排序前 60），过滤 `f3 ≥ 9.9% 且 f2 == f15 已封板`（科创板/创业板按 20% 涨停下浮 0.05 元容差，主板 10%）；通过本地日 K 对比昨日是否封板，区分首板 / 连板（连板数按累计涨幅 / 单板涨幅取对数估算）。
   - `/api/zt/detail?code=sh603xxx`：从列表缓存取基础数据，复用 stockAnalysis 已实测的 fflow / 龙虎榜 / 两融 / 大宗接口拉详情（同源保证口径一致）。
