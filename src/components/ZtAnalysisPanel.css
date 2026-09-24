@@ -270,53 +270,78 @@
   line-height: 1.5;
 }
 
-/* ===== 行业 / 次数：列表+横条 ===== */
-.zt-anly-list,
-.zt-anly-times {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.zt-anly-list-row,
-.zt-anly-times-row {
+/* ===== 行业统计：表格 ===== */
+.zt-anly-table-wrap {
+  overflow-x: auto;
   border: 1px solid var(--line);
   border-radius: 10px;
-  padding: 9px 11px;
   background: #fff;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
 }
 
-.zt-anly-list-name {
-  font-size: 12.5px;
+.zt-anly-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.zt-anly-table thead th {
+  background: #f8fafc;
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.zt-anly-table thead th:not(:first-child) {
+  text-align: right;
+}
+
+.zt-anly-table tbody td {
+  padding: 7px 10px;
+  font-size: 12px;
+  color: var(--text-1);
+  border-bottom: 1px solid #f1f5f9;
+  white-space: nowrap;
+}
+
+.zt-anly-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.zt-anly-table tbody tr:hover {
+  background: rgba(79, 70, 229, 0.04);
+}
+
+.zt-anly-td-name {
   font-weight: 600;
   color: var(--text-1);
 }
 
-.zt-anly-list-bar,
-.zt-anly-times-track {
+.zt-anly-td-count {
+  width: 110px;
+}
+
+.zt-anly-count-bar {
   position: relative;
   height: 16px;
   background: #f1f5f9;
   border-radius: 4px;
   overflow: hidden;
+  min-width: 80px;
 }
 
-.zt-anly-list-fill,
-.zt-anly-times-fill {
+.zt-anly-count-fill {
   position: absolute;
   inset: 0 auto 0 0;
   background: linear-gradient(90deg, rgba(79, 70, 229, 0.18), var(--primary));
   border-radius: 4px;
 }
 
-.zt-anly-list-num,
-.zt-anly-times-num {
+.zt-anly-count-bar span {
   position: relative;
   display: inline-block;
   line-height: 16px;
@@ -328,25 +353,67 @@
   z-index: 1;
 }
 
-.zt-anly-list-meta {
-  font-size: 11.5px;
-  font-weight: 600;
-  color: var(--text-2);
-  font-variant-numeric: tabular-nums;
+.zt-anly-td-net,
+.zt-anly-td-pct {
+  text-align: right;
+  font-weight: 700;
 }
 
-.zt-anly-list-meta.up {
+.zt-anly-td-net.up,
+.zt-anly-td-pct.up {
   color: #dc2626;
 }
 
-.zt-anly-list-meta.down {
+.zt-anly-td-net.down,
+.zt-anly-td-pct.down {
   color: #16a34a;
 }
 
-.zt-anly-list-sub {
-  font-weight: 400;
-  color: var(--text-3);
-  margin-left: 4px;
+/* ===== 涨停次数：列表+横条 ===== */
+.zt-anly-times {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.zt-anly-times-row {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 9px 11px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.zt-anly-times-track {
+  position: relative;
+  height: 16px;
+  background: #f1f5f9;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.zt-anly-times-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: linear-gradient(90deg, rgba(79, 70, 229, 0.18), var(--primary));
+  border-radius: 4px;
+}
+
+.zt-anly-times-num {
+  position: relative;
+  display: inline-block;
+  line-height: 16px;
+  padding: 0 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+  z-index: 1;
 }
 
 /* ===== 涨停次数行 ===== */

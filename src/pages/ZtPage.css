@@ -41,9 +41,8 @@
   max-height: none;
 }
 
-.zt-page-main .zt-list {
+.zt-page-main .zt-table-wrap {
   max-height: 640px;
-  overflow-y: auto;
 }
 
 .zt-page-main .zt-detail {
@@ -56,14 +55,13 @@
   .zt-page-layout {
     grid-template-columns: 1fr;
   }
-  .zt-page-main .zt-list,
-  .zt-page-main .zt-detail {
+  .zt-page-main .zt-table-wrap {
     max-height: none;
   }
 }
 
 @media (max-width: 720px) {
-  .zt-page-main .zt-list,
+  .zt-page-main .zt-table-wrap,
   .zt-page-main .zt-detail {
     max-height: none;
   }

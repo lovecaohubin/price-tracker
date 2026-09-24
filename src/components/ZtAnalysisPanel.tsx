@@ -208,26 +208,44 @@ function IndustrySection({ data }: { data: ZtAnalysisResponse }) {
   }
   const maxCount = data.industries.reduce((a, b) => Math.max(a, b.count), 0)
   return (
-    <ol className="zt-anly-list">
-      {data.industries.map((row) => (
-        <li key={row.name} className="zt-anly-list-row">
-          <div className="zt-anly-list-name">{row.name}</div>
-          <div className="zt-anly-list-bar">
-            <div
-              className="zt-anly-list-fill"
-              style={{ width: `${(row.count / maxCount) * 100}%` }}
-            />
-            <span className="zt-anly-list-num">{row.count} 只</span>
-          </div>
-          <div
-            className={`zt-anly-list-meta ${row.mainNetYi >= 0 ? 'up' : 'down'}`}
-          >
-            {yi(row.mainNetYi)}
-            <span className="zt-anly-list-sub">· 均涨幅 {pct(row.avgChangePct)}</span>
-          </div>
-        </li>
-      ))}
-    </ol>
+    <div className="zt-anly-table-wrap">
+      <table className="zt-anly-table">
+        <thead>
+          <tr>
+            <th>行业</th>
+            <th>涨停数</th>
+            <th>主力净额（亿）</th>
+            <th>均涨幅</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.industries.map((row) => (
+            <tr key={row.name}>
+              <td className="zt-anly-td-name">{row.name}</td>
+              <td className="zt-anly-td-count">
+                <div className="zt-anly-count-bar">
+                  <div
+                    className="zt-anly-count-fill"
+                    style={{ width: `${(row.count / maxCount) * 100}%` }}
+                  />
+                  <span>{row.count} 只</span>
+                </div>
+              </td>
+              <td
+                className={`zt-anly-td-net ${row.mainNetYi >= 0 ? 'up' : 'down'}`}
+              >
+                {yi(row.mainNetYi)}
+              </td>
+              <td
+                className={`zt-anly-td-pct ${row.avgChangePct >= 0 ? 'up' : 'down'}`}
+              >
+                {pct(row.avgChangePct)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   )
 }
 

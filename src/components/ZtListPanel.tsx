@@ -224,16 +224,32 @@ export default function ZtListPanel({ showDetail = true }: Props) {
         )
       )}
 
-      <ul className="zt-list">
-        {sortedItems.map((it) => (
-          <ZtItem
-            key={it.symbol}
-            item={it}
-            active={selected?.symbol === it.symbol}
-            onClick={() => void handleSelect(it)}
-          />
-        ))}
-      </ul>
+      <div className="zt-table-wrap">
+        <table className="zt-table">
+          <thead>
+            <tr>
+              <th className="zt-th-name">名称</th>
+              <th className="zt-th-code">代码</th>
+              <th className="zt-th-board">板数</th>
+              <th className="zt-th-price">价格</th>
+              <th className="zt-th-change">涨幅</th>
+              <th className="zt-th-industry">行业</th>
+              <th className="zt-th-volume">成交量</th>
+              <th className="zt-th-main">主力净额</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sortedItems.map((it) => (
+              <ZtRow
+                key={it.symbol}
+                item={it}
+                active={selected?.symbol === it.symbol}
+                onClick={() => void handleSelect(it)}
+              />
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       {showDetail && selected && (
         <div className="zt-detail">
@@ -267,8 +283,8 @@ export default function ZtListPanel({ showDetail = true }: Props) {
   )
 }
 
-// ===== 单行 =====
-function ZtItem({
+// ===== 表格行 =====
+function ZtRow({
   item,
   active,
   onClick,
@@ -279,45 +295,36 @@ function ZtItem({
 }) {
   const isUp = item.changePct >= 0
   return (
-    <li className={`zt-item ${active ? 'is-active' : ''}`} onClick={onClick}>
-      <div className="zt-item-row1">
-        <div className="zt-name-block">
-          <span className="zt-name">{item.name}</span>
-          <span className="zt-code">{item.code}</span>
-          <span
-            className={`zt-board-badge ${item.isFirstBoard ? '' : 'is-consecutive'}`}
-            title={item.isFirstBoard ? '本次连板的首板' : `连续 ${item.boardCount} 个涨停`}
-          >
-            {item.isFirstBoard ? '首板' : `${item.boardCount} 连板`}
-          </span>
-        </div>
-        <div className="zt-price-block">
-          <span className={`zt-price ${isUp ? 'up' : ''}`}>{item.price.toFixed(2)}</span>
-          <span className={`zt-change ${isUp ? 'up' : ''}`}>
-            {isUp ? '↑' : '↓'} {pct(item.changePct).replace('+', '')}
-          </span>
-        </div>
-      </div>
-
-      <div className="zt-item-row2">
-        <span className="zt-meta">
-          <span className="zt-meta-label">行业：</span>
-          <span className="zt-meta-value">{item.industry ?? '—'}</span>
+    <tr
+      className={`zt-row ${active ? 'is-active' : ''}`}
+      onClick={onClick}
+    >
+      <td className="zt-td-name">
+        <span className="zt-name">{item.name}</span>
+      </td>
+      <td className="zt-td-code">{item.code}</td>
+      <td className="zt-td-board">
+        <span
+          className={`zt-board-badge ${item.isFirstBoard ? '' : 'is-consecutive'}`}
+          title={item.isFirstBoard ? '本次连板的首板' : `连续 ${item.boardCount} 个涨停`}
+        >
+          {item.isFirstBoard ? '首板' : `${item.boardCount} 连板`}
         </span>
-        <span className="zt-meta">
-          <span className="zt-meta-label">成交：</span>
-          <span className="zt-meta-value">{wanShou(item.volumeHands)}</span>
-        </span>
-        <span className="zt-meta">
-          <span className="zt-meta-label">主力：</span>
-          <span
-            className={`zt-meta-value ${item.mainNet == null ? 'is-na' : item.mainNet >= 0 ? 'up' : 'down'}`}
-          >
-            {item.mainNet == null ? '—' : yuan2yi(item.mainNet)}
-          </span>
-        </span>
-      </div>
-    </li>
+      </td>
+      <td className={`zt-td-price ${isUp ? 'up' : 'down'}`}>
+        {item.price.toFixed(2)}
+      </td>
+      <td className={`zt-td-change ${isUp ? 'up' : 'down'}`}>
+        {pct(item.changePct)}
+      </td>
+      <td className="zt-td-industry">{item.industry ?? '—'}</td>
+      <td className="zt-td-volume">{wanShou(item.volumeHands)}</td>
+      <td
+        className={`zt-td-main ${item.mainNet == null ? 'is-na' : item.mainNet >= 0 ? 'up' : 'down'}`}
+      >
+        {item.mainNet == null ? '—' : yuan2yi(item.mainNet)}
+      </td>
+    </tr>
   )
 }
 

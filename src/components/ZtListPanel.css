@@ -104,73 +104,119 @@
   font-weight: 600;
 }
 
-.zt-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  overflow-y: auto;
+/* ===== 涨停股池表格 ===== */
+.zt-table-wrap {
   flex: 1;
   min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.zt-item {
+  overflow: auto;
   border: 1px solid var(--line);
   border-radius: 10px;
-  padding: 9px 11px;
   background: #fff;
-  cursor: pointer;
-  transition: border-color 0.15s, box-shadow 0.15s, transform 0.12s;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
 }
 
-.zt-item:hover {
-  border-color: var(--primary);
-  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.12);
-}
-
-.zt-item.is-active {
-  border-color: var(--primary);
-  background: linear-gradient(180deg, rgba(79, 70, 229, 0.04) 0%, rgba(255, 255, 255, 1) 100%);
-  box-shadow: 0 2px 12px rgba(79, 70, 229, 0.18);
-}
-
-.zt-item-row1 {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-}
-
-.zt-name-block {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  min-width: 0;
-  flex: 1;
-}
-
-.zt-name {
-  font-size: 13.5px;
-  font-weight: 700;
-  color: var(--text-1);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 110px;
-}
-
-.zt-code {
-  font-size: 11px;
-  color: var(--text-3);
+.zt-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
   font-variant-numeric: tabular-nums;
 }
 
+.zt-table thead th {
+  position: sticky;
+  top: 0;
+  background: #f8fafc;
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+  z-index: 1;
+}
+
+.zt-table tbody tr {
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.zt-table tbody tr:hover {
+  background: rgba(79, 70, 229, 0.05);
+}
+
+.zt-table tbody tr.is-active {
+  background: linear-gradient(180deg, rgba(79, 70, 229, 0.08) 0%, rgba(79, 70, 229, 0.03) 100%);
+  box-shadow: inset 2px 0 0 var(--primary);
+}
+
+.zt-table tbody td {
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--text-1);
+  border-bottom: 1px solid #f1f5f9;
+  white-space: nowrap;
+}
+
+.zt-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.zt-td-name .zt-name {
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+.zt-td-code {
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.zt-td-board {
+  text-align: center;
+}
+
+.zt-td-price {
+  text-align: right;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.zt-td-change {
+  text-align: right;
+  font-weight: 600;
+}
+
+.zt-td-industry {
+  color: var(--text-2);
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.zt-td-volume,
+.zt-td-main {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.zt-td-price.up,
+.zt-td-change.up,
+.zt-td-main.up {
+  color: #dc2626;
+}
+
+.zt-td-price.down,
+.zt-td-change.down,
+.zt-td-main.down {
+  color: #16a34a;
+}
+
+.zt-td-main.is-na {
+  color: #94a3b8;
+}
+
 .zt-board-badge {
+  display: inline-block;
   font-size: 10px;
   padding: 1px 6px;
   border-radius: 5px;
@@ -185,70 +231,6 @@
   background: #fef3c7;
   color: #92400e;
   border-color: #fde68a;
-}
-
-.zt-price-block {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  font-variant-numeric: tabular-nums;
-  flex-shrink: 0;
-}
-
-.zt-price {
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.zt-price.up {
-  color: #dc2626;
-}
-
-.zt-change {
-  font-size: 11.5px;
-  font-weight: 600;
-}
-
-.zt-change.up {
-  color: #dc2626;
-}
-
-.zt-item-row2 {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 11px;
-  color: var(--text-3);
-  flex-wrap: wrap;
-}
-
-.zt-meta {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-
-.zt-meta-label {
-  color: var(--text-3);
-}
-
-.zt-meta-value {
-  color: var(--text-2);
-  font-weight: 500;
-}
-
-.zt-meta-value.up {
-  color: #dc2626;
-}
-
-.zt-meta-value.down {
-  color: #16a34a;
-}
-
-.zt-meta-value.is-na {
-  color: #94a3b8;
 }
 
 .zt-loading,
