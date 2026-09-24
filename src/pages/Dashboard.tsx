@@ -10,6 +10,8 @@ import AddAssetForm from '../components/AddAssetForm';
 import PriceChart from '../components/PriceChart';
 import TradeAnalysis from '../components/TradeAnalysis';
 import HoldAdviceBacktest from '../components/HoldAdviceBacktest';
+import StockAnalysis from './StockAnalysis';
+import { syncStockAnalysisSymbols } from '../services/stockAnalysisApi';
 import '../App.css';
 
 // localStorage 持久化键
@@ -73,7 +75,7 @@ function Dashboard() {
   const [lastUpdate, setLastUpdate] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
-  const [activeSection, setActiveSection] = useState<'assets' | 'analysis'>('assets');
+  const [activeSection, setActiveSection] = useState<'assets' | 'analysis' | 'stock'>('assets');
   // 持仓股数：代码 -> 股数（独立于行情，避免刷新时被覆盖）
   const [shares, setShares] = useState<Record<string, number>>(() => loadShares());
   // 大盘快照：持有建议的「环境因子」，接口不可用时降级为仅个股因子
@@ -134,6 +136,14 @@ function Dashboard() {
   useEffect(() => {
     refreshAll(defaultSymbols);
   }, [refreshAll]);
+
+  // 跟踪列表同步给「股票分析」模块（服务端 15:01 定时任务的数据源）
+  useEffect(() => {
+    const symbols = assets.map(a => a.symbol);
+    if (symbols.length > 0) {
+      syncStockAnalysisSymbols(symbols).catch(() => {});
+    }
+  }, [assets]);
 
   // 大盘快照：服务端已缓存 60 秒，失败不阻塞行情，只把持有建议降级为「仅个股因子」
   const loadMarket = useCallback(async () => {
@@ -241,6 +251,12 @@ function Dashboard() {
             >
               数据分析
             </button>
+            <button
+              className={`section-tab ${activeSection === 'stock' ? 'active' : ''}`}
+              onClick={() => setActiveSection('stock')}
+            >
+              股票分析
+            </button>
           </div>
           <div className="tabs-tools">
             {lastUpdate && (
@@ -282,6 +298,8 @@ function Dashboard() {
 
         {activeSection === 'analysis' ? (
           <TradeAnalysis />
+        ) : activeSection === 'stock' ? (
+          <StockAnalysis />
         ) : (
           <>
             {marketNote && !loading && (

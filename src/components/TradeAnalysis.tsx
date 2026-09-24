@@ -122,23 +122,26 @@ function normalize(list: TradeRecord[]): TradeRecord[] {
 
 function TradeAnalysis() {
   // 图表容器尺寸：自维护 ResizeObserver，避免 Recharts ResponsiveContainer 在
-  // 组件卸载/重挂载时对已卸载 DOM 调用 getBoundingClientRect 抛空指针
-  const chartWrapRef = useRef<HTMLDivElement>(null);
+  // 组件卸载/重挂载时对已卸载 DOM 调用 getBoundingClientRect 抛空指针。
+  // 注意：loading 早退导致容器在首挂载时不在 DOM，mount effect 拿不到 ref，
+  // 必须用 ref 回调在容器真正挂上时才建立观察（observe 自带一次初始回调）
+  const roRef = useRef<ResizeObserver | null>(null);
   const [chartSize, setChartSize] = useState({ width: 0, height: 280 });
 
-  useEffect(() => {
-    const el = chartWrapRef.current;
+  const attachChart = useCallback((el: HTMLDivElement | null) => {
+    if (roRef.current) {
+      roRef.current.disconnect();
+      roRef.current = null;
+    }
     if (!el) return;
-    const update = () => {
+    const ro = new ResizeObserver(() => {
       const rect = el.getBoundingClientRect();
       if (rect.width > 0 && rect.height > 0) {
         setChartSize({ width: rect.width, height: rect.height });
       }
-    };
-    update();
-    const ro = new ResizeObserver(update);
+    });
     ro.observe(el);
-    return () => ro.disconnect();
+    roRef.current = ro;
   }, []);
 
   const [records, setRecords] = useState<TradeRecord[]>([]);
@@ -485,12 +488,13 @@ function TradeAnalysis() {
           </div>
         </div>
 
-        {chartData.length === 0 ? (
-          <div className="empty-state">该区间内没有可用于绘图的记录</div>
-        ) : (
-          <div className="chart-container" ref={chartWrapRef}>
-            {chartSize.width > 0 && (
-              <LineChart
+        {/* ref 容器必须无条件挂载：数据异步加载后才出现的话，
+            首挂载时 ResizeObserver 拿不到节点，图表永远测不到宽度 */}
+        <div className="chart-container" ref={attachChart}>
+          {chartData.length === 0 ? (
+            <div className="empty-state">该区间内没有可用于绘图的记录</div>
+          ) : chartSize.width > 0 ? (
+            <LineChart
                 data={chartData}
                 width={chartSize.width}
                 height={chartSize.height}
@@ -547,9 +551,8 @@ function TradeAnalysis() {
                   />
                 )}
               </LineChart>
-            )}
-          </div>
-        )}
+          ) : null}
+        </div>
       </div>
 
       <div className="table-section">
@@ -640,6 +643,13 @@ function TradeAnalysis() {
                             <span className="detail-label">本金 / 杠杆 / 总金额</span>
                             <p>
                               {fmtMoney(r.principal)} / {fmtMoney(r.leverage)} / {fmtMoney(r.totalAmount)}
+                            </p>
+                          </div>
+                          <div className="detail-item">
+                            <span className="detail-label">当前金额① / ② / 合计</span>
+                            <p>
+                              {fmtMoney(r.currentAmountPart1)} / {fmtMoney(r.currentAmountPart2)} /{' '}
+                              {fmtMoney(r.currentAmount)}
                             </p>
                           </div>
                           <div className="detail-item">

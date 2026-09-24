@@ -40,3 +40,8 @@ probe_local.mjs
 probe_out.txt
 test_eastmoney.js
 verify_local.mjs
+
+# 临时调试（dev server 输出 / 探针 ps1）
+tmp-*.ps1
+tmp-dev.out
+tmp-dev.err

@@ -3,6 +3,8 @@ import react from '@vitejs/plugin-react'
 import fs from 'node:fs'
 import path from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { stockAnalysisPlugin } from './server/stockAnalysis'
+import { ztPlugin } from './server/zt'
 
 // 东方财富 K 线接口对瞬时高并发会做连接重置(RST/UND_ERR_SOCKET)，
 // 需要一个全局信号量限制出站并发，并对失败做退避重试
@@ -621,7 +623,7 @@ function marketPlugin(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [react(), klinePlugin(), tradeLogPlugin(), marketPlugin()],
+  plugins: [react(), klinePlugin(), tradeLogPlugin(), marketPlugin(), stockAnalysisPlugin(), ztPlugin()],
   server: {
     proxy: {
       // 腾讯股票API - 实时行情（UTF-8）

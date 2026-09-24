@@ -19,7 +19,9 @@ const GROUPS: { title: string; fields: FieldDef[] }[] = [
       { key: 'principal', label: '本金', unit: '元' },
       { key: 'leverage', label: '杠杆资金', unit: '元' },
       { key: 'totalAmount', label: '总金额', unit: '元' },
-      { key: 'currentAmount', label: '当前金额', unit: '元' },
+      { key: 'currentAmountPart1', label: '当前金额①', unit: '元' },
+      { key: 'currentAmountPart2', label: '当前金额②', unit: '元' },
+      { key: 'currentAmount', label: '当前金额合计', unit: '元' },
     ],
   },
   {
@@ -75,6 +77,7 @@ const DEFAULT_TOTAL_AMOUNT = 555000;
 
 // 自动联动字段的展示说明（表单 helper 文案 + 「自动」徽章的依据）
 const AUTO_HELPERS: Partial<Record<TradeRecordField, string>> = {
+  currentAmount: '= 当前金额① + 当前金额②',
   dayPnl: '= 当日当前金额 - 昨日当前金额',
   cumPnl: '= 当前金额 - 总金额',
   cumPnlRate: '= 累计盈亏 / 总金额',
@@ -114,11 +117,17 @@ function TradeRecordForm({
   const prevTurnover = prevRecord?.turnover ?? null;
   const [inputs, setInputs] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {};
+    // 历史记录只有合计、没有拆分项：把合计落到①，保证编辑时两个框不空、合计可复算
+    const hasParts =
+      initial?.currentAmountPart1 != null || initial?.currentAmountPart2 != null;
     for (const f of ALL_FIELDS) {
       let v = initial?.[f.key] as number | null | undefined;
       // 新建记录时，totalAmount 默认填 555000，便于派生字段立即可用
       if (!initial && f.key === 'totalAmount' && v == null) {
         v = DEFAULT_TOTAL_AMOUNT;
+      }
+      if (initial && !hasParts && f.key === 'currentAmountPart1' && v == null) {
+        v = initial.currentAmount;
       }
       init[f.key] = toInput(v, !!f.pct);
     }
@@ -187,6 +196,13 @@ function TradeRecordForm({
   const recomputeDerived = (next: Record<string, string>) => {
     const v1 = parseValue(next.marketValue1 ?? '', false);
     const v2 = parseValue(next.marketValue2 ?? '', false);
+    // 当前金额 = 当前金额① + 当前金额②（两个框都清空则合计一并清空）
+    const raw1 = next.currentAmountPart1 ?? '';
+    const raw2 = next.currentAmountPart2 ?? '';
+    next.currentAmount =
+      raw1.trim() || raw2.trim()
+        ? toInput((parseValue(raw1, false) ?? 0) + (parseValue(raw2, false) ?? 0), false)
+        : '';
     const cur = parseValue(next.currentAmount ?? '', false);
     const tot = parseValue(next.totalAmount ?? '', false);
     const turn = parseValue(next.turnover ?? '', false);
