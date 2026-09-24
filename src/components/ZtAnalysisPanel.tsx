@@ -58,13 +58,13 @@ export default function ZtAnalysisPanel() {
   return (
     <div className="zt-anly-panel">
       <div className="zt-anly-head">
-        <div>
+        <div className="zt-anly-head-titles">
           <h3>涨停分析</h3>
-          <span className="zt-anly-subtitle">
-            {data
-              ? `更新于 ${new Date(data.fetchedAt).toLocaleTimeString('zh-CN', { hour12: false })}`
-              : '未刷新'}
-          </span>
+          {data && (
+            <span className="zt-anly-subtitle">
+              更新于 {new Date(data.fetchedAt).toLocaleTimeString('zh-CN', { hour12: false })}
+            </span>
+          )}
         </div>
         <button
           className={`zt-anly-refresh${loading ? ' is-loading' : ''}`}
@@ -80,7 +80,7 @@ export default function ZtAnalysisPanel() {
 
       {nextSchedule && (
         <div className="zt-anly-next">
-          下次定时刷新 {nextSchedule.toLocaleTimeString('zh-CN', { hour12: false })}
+          下次定时 {nextSchedule.toLocaleTimeString('zh-CN', { hour12: false })}
         </div>
       )}
 

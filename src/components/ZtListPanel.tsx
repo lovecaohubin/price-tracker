@@ -142,14 +142,12 @@ export default function ZtListPanel({ showDetail = true }: Props) {
   return (
     <aside className="zt-panel">
       <div className="zt-head">
-        <h3>首版涨停</h3>
-        <span className="zt-subtitle">
-          {fetchedTime ? `更新 ${fetchedTime}` : '未刷新'}
-          {tradeDate ? ` · ${tradeDate}` : ''}
-        </span>
-      </div>
-
-      <div className="zt-toolbar">
+        <div className="zt-head-titles">
+          <h3>首版涨停</h3>
+          {fetchedTime && (
+            <span className="zt-subtitle">更新 {fetchedTime}</span>
+          )}
+        </div>
         <button
           className={`zt-btn-refresh${loading ? ' is-loading' : ''}`}
           onClick={() => void loadList()}
@@ -160,12 +158,13 @@ export default function ZtListPanel({ showDetail = true }: Props) {
           <span>数据更新</span>
           {loading && <span className="zt-btn-loading-dot" />}
         </button>
-        {nextSchedule && (
-          <span className="zt-next-tick">
-            下次定时 {nextSchedule.toLocaleTimeString('zh-CN', { hour12: false })}
-          </span>
-        )}
       </div>
+
+      {nextSchedule && (
+        <div className="zt-next-tick">
+          下次定时 {nextSchedule.toLocaleTimeString('zh-CN', { hour12: false })}
+        </div>
+      )}
 
       <div className="zt-tabs">
         <button

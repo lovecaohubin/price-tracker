@@ -16,9 +16,16 @@
 .zt-head {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
+  align-items: center;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.zt-head-titles {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
 }
 
 .zt-head h3 {
@@ -31,6 +38,7 @@
 .zt-head .zt-subtitle {
   font-size: 11.5px;
   color: var(--text-3);
+  font-variant-numeric: tabular-nums;
 }
 
 .zt-tabs {
@@ -269,16 +277,7 @@
   line-height: 1.6;
 }
 
-/* 工具栏：数据更新按钮 + 下次定时 */
-.zt-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 4px 2px 6px;
-  border-bottom: 1px dashed var(--line);
-}
-
+/* 「数据更新」按钮（位于面板最右侧） */
 .zt-btn-refresh {
   display: inline-flex;
   align-items: center;
@@ -343,6 +342,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  padding: 0 2px;
 }
 
 .zt-note {
