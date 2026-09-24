@@ -24,6 +24,7 @@ import type {
   ZtLhbSummary,
   ZtRzrqSummary,
   ZtBlockTradeSummary,
+  ZtAnalysisResponse,
 } from '../src/types'
 
 // ===== 出站 HTTP（与 stockAnalysis 同样的并发限流 + 退避） =====
@@ -536,6 +537,243 @@ async function fetchDetail(code: string): Promise<ZtDetailResponse | null> {
   }
 }
 
+// ===== 涨停分析（右侧面板） =====
+interface AnalysisCache {
+  resp: ZtAnalysisResponse
+  expireAt: number
+}
+let analysisCache: AnalysisCache | null = null
+const ANALYSIS_TTL_MS = 60 * 1000 // 1 分钟缓存
+
+/** 单只涨停股近 30 个交易日日 K；用于统计涨停次数 */
+async function fetchStockDailyKline(symbol: string, lmt = 30): Promise<
+  { date: string; open: number; close: number; high: number; low: number; volume: number }[]
+> {
+  const url =
+    `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${secidOf(symbol)}` +
+    `&klt=101&fqt=0&lmt=${lmt}&end=20500101&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56`
+  const json = await fetchJson<{ data?: { klines?: string[] } }>(url)
+  const rows = json?.data?.klines ?? []
+  return rows.map((r) => {
+    const p = r.split(',')
+    return {
+      date: p[0],
+      open: Number(p[1]),
+      close: Number(p[2]),
+      high: Number(p[3]),
+      low: Number(p[4]),
+      volume: Number(p[5] || 0),
+    }
+  })
+}
+
+/** 判定某日是否涨停：当日收盘价 >= 当日涨停价 - 0.05（与首板判定一致的容差）
+ *  涨停价是基于本前一日 close → multiplier，本函数从「当日的前一根」开始遍历避免重复计算
+ */
+function isBarLimitUp(
+  prevClose: number,
+  close: number,
+  code: string,
+): boolean {
+  if (prevClose <= 0 || close <= 0) return false
+  const [, upLimit] = limitPrices(prevClose, code)
+  return close >= upLimit - 0.05
+}
+
+/** 单只涨停股：统计涨停次数（最近 30 个交易日） */
+async function calcStockBoardTimes(
+  item: ZtListItem,
+): Promise<{ times: number; bars: number }> {
+  try {
+    const bars = await fetchStockDailyKline(item.symbol, 30)
+    if (bars.length < 2) return { times: item.boardCount, bars: bars.length }
+    let times = 0
+    // bars[0] 是最早的；遍历 [i-1, i]：以 i-1 的 close 为基准，判定 i 的 close
+    for (let i = 1; i < bars.length; i++) {
+      const prev = bars[i - 1]
+      const cur = bars[i]
+      if (isBarLimitUp(prev.close, cur.close, item.code)) times++
+    }
+    // 把今日也纳入：今日已封板，应算 1 次
+    if (item.sealedAmt && item.sealedAmt > 0) times++
+    return { times, bars: bars.length }
+  } catch {
+    // 日 K 拉不到时降级：只算今日
+    return { times: item.boardCount, bars: 0 }
+  }
+}
+
+async function fetchAnalysis(): Promise<ZtAnalysisResponse> {
+  if (analysisCache && analysisCache.expireAt > Date.now()) return analysisCache.resp
+
+  // 上游（涨停股池）失败时降级返回空数据，避免整个接口 500
+  let list: ZtListResponse
+  try {
+    list = await fetchList()
+  } catch (e) {
+    console.error('[涨停分析] 涨停股池拉取失败:', e)
+    return {
+      fetchedAt: new Date().toISOString(),
+      tradeDate: ymd(new Date()),
+      stale: true,
+      note: `涨停股池拉取失败（${e instanceof Error ? e.message : String(e)}），请稍后重试`,
+      summary: {
+        total: 0,
+        firstBoard: 0,
+        consecutive: 0,
+        sealed: 0,
+        sealedRate: 0,
+        totalSealedAmtYi: 0,
+        avgSealedAmtYi: 0,
+        totalMainNetYi: 0,
+        avgChangePct: 0,
+        intensity: 0,
+      },
+      industries: [],
+      boardDistribution: [],
+      maxBoard: null,
+      topSealed: [],
+      topGainers: [],
+      topTurnover: [],
+      topMainNet: [],
+      topBoardTimes: [],
+    }
+  }
+  const items = list.items
+
+  // ===== 涨停潮指数 =====
+  const total = items.length
+  const firstBoard = items.filter((i) => i.isFirstBoard).length
+  const consecutive = total - firstBoard
+  const sealed = items.filter((i) => (i.sealedAmt ?? 0) > 0).length
+  const sealedRate = total ? sealed / total : 0
+  const totalSealedAmt = items.reduce((a, b) => a + (b.sealedAmt ?? 0), 0)
+  const totalMainNet = items.reduce((a, b) => a + (b.mainNet ?? 0), 0)
+  const avgSealedAmt = total ? totalSealedAmt / total : 0
+  const avgChangePct = total ? items.reduce((a, b) => a + b.changePct, 0) / total : 0
+  // 综合强度：分位排名（封单 + 主力净额 + 涨幅都折算 0-1，再加权）
+  // 简化：直接用 (封单均值亿元 + 主力亿元绝对值 + 涨幅×100) / 3
+  const intensity =
+    total === 0
+      ? 0
+      : (totalSealedAmt / 1e8) / total * 0.5 +
+      Math.abs(totalMainNet / 1e8) / total * 0.2 +
+      avgChangePct * 100 * 0.3
+
+  // ===== 行业统计 =====
+  const industryMap = new Map<string, { count: number; mainNet: number; changeSum: number }>()
+  for (const it of items) {
+    const name = it.industry ?? '未知'
+    const cur = industryMap.get(name) ?? { count: 0, mainNet: 0, changeSum: 0 }
+    cur.count++
+    cur.mainNet += it.mainNet ?? 0
+    cur.changeSum += it.changePct
+    industryMap.set(name, cur)
+  }
+  const industries = Array.from(industryMap.entries())
+    .map(([name, v]) => ({
+      name,
+      count: v.count,
+      mainNetYi: Number((v.mainNet / 1e8).toFixed(4)),
+      avgChangePct: Number((v.changeSum / v.count).toFixed(4)),
+    }))
+    .sort((a, b) => b.count - a.count || Math.abs(b.mainNetYi) - Math.abs(a.mainNetYi))
+    .slice(0, 10)
+
+  // ===== 涨停高度分布 =====
+  const heightMap = new Map<number, number>()
+  for (const it of items) {
+    heightMap.set(it.boardCount, (heightMap.get(it.boardCount) ?? 0) + 1)
+  }
+  const boardDistribution = Array.from(heightMap.entries())
+    .map(([boardCount, count]) => ({ boardCount, count }))
+    .sort((a, b) => a.boardCount - b.boardCount)
+
+  // 最高板龙头
+  const sortedByBoard = [...items].sort((a, b) => b.boardCount - a.boardCount)
+  const maxBoardItem = sortedByBoard[0] ?? null
+  const maxBoard = maxBoardItem && maxBoardItem.boardCount >= 2
+    ? {
+        name: maxBoardItem.name,
+        symbol: maxBoardItem.symbol,
+        code: maxBoardItem.code,
+        boardCount: maxBoardItem.boardCount,
+        changePct: maxBoardItem.changePct,
+      }
+    : null
+
+  // ===== 个股排行 =====
+  const topSealed = [...items]
+    .filter((i) => (i.sealedAmt ?? 0) > 0)
+    .sort((a, b) => (b.sealedAmt ?? 0) - (a.sealedAmt ?? 0))
+    .slice(0, 10)
+  const topGainers = [...items].sort((a, b) => b.changePct - a.changePct).slice(0, 10)
+  const topTurnover = [...items]
+    .filter((i) => i.turnoverRate != null)
+    .sort((a, b) => (b.turnoverRate ?? 0) - (a.turnoverRate ?? 0))
+    .slice(0, 10)
+  const topMainNet = [...items]
+    .filter((i) => (i.mainNet ?? 0) > 0)
+    .sort((a, b) => (b.mainNet ?? 0) - (a.mainNet ?? 0))
+    .slice(0, 10)
+
+  // ===== 涨停次数 Top 10（近 30 日 K） =====
+  // 受限流保护：MAX_CONCURRENCY=4 已经在 fetchOutbound 守护
+  const boardTimesResults = await Promise.allSettled(
+    items.map(async (it) => {
+      const { times } = await calcStockBoardTimes(it)
+      return {
+        name: it.name,
+        symbol: it.symbol,
+        code: it.code,
+        boardTimes: times,
+        todayChangePct: it.changePct,
+        industry: it.industry,
+      }
+    }),
+  )
+  type BoardTimesRow = {
+    name: string; symbol: string; code: string; boardTimes: number
+    todayChangePct: number; industry: string | null
+  }
+  const topBoardTimes: BoardTimesRow[] = boardTimesResults
+    .filter((r) => r.status === 'fulfilled' && r.value.times > 1)
+    .map((r) => (r as PromiseFulfilledResult<BoardTimesRow>).value)
+    .sort((a, b) => b.boardTimes - a.boardTimes)
+    .slice(0, 10)
+
+  const resp: ZtAnalysisResponse = {
+    fetchedAt: new Date().toISOString(),
+    tradeDate: list.tradeDate,
+    note:
+      '行业 / 高度 / 排行均基于当日涨停股池聚合；' +
+      '涨停次数 = 近 30 个交易日内"收盘价触及涨停价"的次数（含今日）。' +
+      '数据源：东方财富 push2 clist + 本地日 K 判定。',
+    summary: {
+      total,
+      firstBoard,
+      consecutive,
+      sealed,
+      sealedRate: Number(sealedRate.toFixed(4)),
+      totalSealedAmtYi: Number((totalSealedAmt / 1e8).toFixed(4)),
+      avgSealedAmtYi: Number((avgSealedAmt / 1e8).toFixed(4)),
+      totalMainNetYi: Number((totalMainNet / 1e8).toFixed(4)),
+      avgChangePct: Number(avgChangePct.toFixed(4)),
+      intensity: Number(intensity.toFixed(2)),
+    },
+    industries,
+    boardDistribution,
+    maxBoard,
+    topSealed,
+    topGainers,
+    topTurnover,
+    topMainNet,
+    topBoardTimes,
+  }
+  analysisCache = { resp, expireAt: Date.now() + ANALYSIS_TTL_MS }
+  return resp
+}
+
 // ===== HTTP =====
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -579,6 +817,11 @@ export function ztPlugin(): Plugin {
               res.end(JSON.stringify({ error: '当前不在涨停股池内' }))
               return
             }
+            res.end(JSON.stringify(r))
+            return
+          }
+          if (url.pathname === '/analysis') {
+            const r = await fetchAnalysis()
             res.end(JSON.stringify(r))
             return
           }

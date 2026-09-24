@@ -236,6 +236,78 @@ export interface ZtListResponse {
   stale?: boolean;
 }
 
+/** 涨停分析汇总（右侧分析面板的数据） */
+export interface ZtAnalysisResponse {
+  fetchedAt: string;
+  tradeDate: string;
+  /** 接口是否降级（拉取部分失败但仍可用） */
+  stale?: boolean;
+  /** 数据源说明 */
+  note: string;
+
+  /** 涨停潮指数（基于当日涨停股池聚合） */
+  summary: {
+    /** 涨停股总数 */
+    total: number;
+    /** 首板数 */
+    firstBoard: number;
+    /** 连板数（> 1 板） */
+    consecutive: number;
+    /** 仍封板数（封单金额 > 0） */
+    sealed: number;
+    /** 封板率（0-1） */
+    sealedRate: number;
+    /** 总封单金额（亿元） */
+    totalSealedAmtYi: number;
+    /** 平均封单金额（亿元） */
+    avgSealedAmtYi: number;
+    /** 主力净流入合计（亿元） */
+    totalMainNetYi: number;
+    /** 平均涨幅（小数，如 0.105） */
+    avgChangePct: number;
+    /** 平均封单/涨幅综合强度（简单算术综合，仅排序用） */
+    intensity: number;
+  };
+
+  /** 行业统计（按涨停股数降序，最多 10） */
+  industries: {
+    name: string;
+    count: number;
+    mainNetYi: number;
+    avgChangePct: number;
+  }[];
+
+  /** 涨停高度分布（按 boardCount 分组，1=首板、2=2板…） */
+  boardDistribution: {
+    boardCount: number;
+    count: number;
+  }[];
+  /** 当前最高板龙头 */
+  maxBoard: {
+    name: string;
+    symbol: string;
+    code: string;
+    boardCount: number;
+    changePct: number;
+  } | null;
+
+  /** 个股排行 Top 10 */
+  topSealed: ZtListItem[];
+  topGainers: ZtListItem[];
+  topTurnover: ZtListItem[];
+  topMainNet: ZtListItem[];
+
+  /** 涨停次数 Top 10（基于近 30 个交易日日 K 判定） */
+  topBoardTimes: {
+    name: string;
+    symbol: string;
+    code: string;
+    boardTimes: number;
+    todayChangePct: number;
+    industry: string | null;
+  }[];
+}
+
 /** 涨停股票详情（点击列表项后展示） */
 export interface ZtDetailItem extends ZtListItem {
   /** 当日 K 线（开 / 高 / 低 / 收） */
