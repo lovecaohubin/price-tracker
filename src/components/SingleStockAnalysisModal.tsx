@@ -26,7 +26,7 @@ const numPct = (v: number | null | undefined) => (v == null ? '—' : `${v.toFix
 /**
  * 单只股票按需分析弹窗
  *  - 由「资产跟踪」页每张 AssetCard 上的「股票分析」按钮触发
- *  - 内容限定：今日行情底色 / 资金流向 / 融资融券（T+1 披露）
+ *  - 内容限定：今日行情底色 / 资金流向
  */
 export default function SingleStockAnalysisModal({ symbol, name, onClose }: Props) {
   const [data, setData] = useState<SingleStockAnalysisResponse | null>(null)
@@ -82,7 +82,7 @@ export default function SingleStockAnalysisModal({ symbol, name, onClose }: Prop
               {data
                 ? `按需生成于 ${new Date(data.fetchedAt).toLocaleTimeString('zh-CN')}`
                 : '按需分析'}
-              ；仅含今日行情 / 资金流向 / 融资融券
+              ；仅含今日行情 / 资金流向
             </span>
           </div>
           <button className="ssa-close" onClick={onClose} aria-label="关闭">
@@ -234,57 +234,7 @@ export default function SingleStockAnalysisModal({ symbol, name, onClose }: Prop
                 )}
               </section>
 
-              {/* 四、融资融券（T+1 披露） */}
-              <section className="ssa-section">
-                <h4>
-                  <span className="ssa-num">四</span>
-                  融资融券
-                  <span className="ssa-t1">T+1 披露</span>
-                </h4>
-                {data.rzrq ? (
-                  <div className="ssa-rzrq">
-                    <div className="ssa-rzrq-head">
-                      <span className="ssa-rzrq-date">{data.rzrq.date}</span>
-                      {data.rzrq.downDays != null && data.rzrq.downDays > 0 && (
-                        <span className="ssa-rzrq-down">
-                          融资连续净偿还 {data.rzrq.downDays} 日
-                        </span>
-                      )}
-                    </div>
-                    <div className="ssa-rzrq-grid">
-                      <div>
-                        <label>融资余额</label>
-                        <strong>{yiAbs(data.rzrq.rzyeYi)}</strong>
-                      </div>
-                      <div>
-                        <label>融资净买入</label>
-                        <strong className={(data.rzrq.rzjmeYi ?? 0) >= 0 ? 'up' : 'down'}>
-                          {yi(data.rzrq.rzjmeYi)}
-                        </strong>
-                      </div>
-                      <div>
-                        <label>融资买入额</label>
-                        <strong>{yiAbs(data.rzrq.rzmreYi)}</strong>
-                      </div>
-                      <div>
-                        <label>融资偿还额</label>
-                        <strong>{yiAbs(data.rzrq.rzcheYi)}</strong>
-                      </div>
-                      <div>
-                        <label>融券余量</label>
-                        <strong>
-                          {data.rzrq.rqylWan != null
-                            ? `${data.rzrq.rqylWan.toFixed(2)} 万股`
-                            : '—'}
-                        </strong>
-                      </div>
-                    </div>
-                    <p className="ssa-source">{data.sources.rzrq}</p>
-                  </div>
-                ) : (
-                  <div className="ssa-empty">融资融券暂无数据</div>
-                )}
-              </section>
+              {/* 四、融资融券（T+1 披露）：按需已移除 */}
 
               <p className="ssa-note">{data.note}</p>
             </>
