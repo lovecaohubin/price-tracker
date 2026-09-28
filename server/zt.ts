@@ -400,12 +400,15 @@ async function buildItemsFromEm(
       const code = String(row.f12 ?? '')
       let judge = { isFirstBoard: true, boardCount: 1 }
       try {
-        const k = await fetch2DayKline(symbol)
-        if (k && k.prevClose > 0 && k.prevPrevClose > 0) {
-          judge = judgeFirstBoard(k.prevPrevClose, k.prevClose, code, changePct)
-        } else {
-          judge = { isFirstBoard: true, boardCount: 1 }
-        }
+        const bars = await fetchKlineBars(symbol, 30)
+        // 今日已封板：行情快照判定（f2==f15 且达涨停价），比日 K 更实时
+        const todaySealed = isSealedUp(
+          num(row.f2) ?? 0,
+          num(row.f15) ?? 0,
+          prevClose,
+          code,
+        )
+        judge = judgeBoard(bars, code, todaySealed, prevClose)
       } catch {
         judge = { isFirstBoard: true, boardCount: 1 }
       }
@@ -425,14 +428,12 @@ async function buildItemsFromSina(
       const code = String(row.code ?? '')
       let judge = { isFirstBoard: true, boardCount: 1 }
       try {
-        // lmt=30 与涨停次数统计保持一致，命中同一份 K 线缓存（避免重复请求）
-        const klines = await fetchKlineSina(symbol, 30)
-        // 新浪日 K 含当日：倒数第二根=昨日，倒数第三根=前日
-        if (klines.length >= 3) {
-          const prevBar = klines[klines.length - 2]
-          const prevPrevBar = klines[klines.length - 3]
-          judge = judgeFirstBoard(prevPrevBar.close, prevBar.close, code, changePct)
-        }
+        const bars = await fetchKlineBars(symbol, 30)
+        // 今日已封板：现价 == 最高价 且达涨停价
+        const trade = num(row.trade) ?? 0
+        const high = num(row.high) ?? 0
+        const todaySealed = isSealedUp(trade, high, prevClose, code)
+        judge = judgeBoard(bars, code, todaySealed, prevClose)
       } catch {
         judge = { isFirstBoard: true, boardCount: 1 }
       }
@@ -442,65 +443,113 @@ async function buildItemsFromSina(
   return items
 }
 
-/** 拉个股日 K，取「昨日 + 前日」两根收盘价，用于首板判定
- *  （昨日涨停价要基于前日 close 计算，所以必须拿前日）
+/** 拉个股日 K（30 根）：东财优先，失败回退新浪。
+ *  用于首板 / 连板判定 —— 需要连续多根才能数出连板天数
  */
-async function fetch2DayKline(symbol: string): Promise<{
-  prevClose: number
-  prevPrevClose: number
-} | null> {
-  const url =
-    `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${secidOf(symbol)}` +
-    `&klt=101&fqt=0&lmt=10&end=20500101&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55`
-  const json = await fetchJson<{ data?: { klines?: string[] } }>(url)
-  const rows = json?.data?.klines ?? []
-  if (rows.length < 3) return null
-  // K 线行：[date, open, close, high, low]；最后一根是当日，往前依次昨日 / 前日
-  const closeOf = (l: string) => Number(l.split(',')[2])
-  return {
-    prevClose: closeOf(rows[rows.length - 2]),
-    prevPrevClose: closeOf(rows[rows.length - 3]),
+async function fetchKlineBars(
+  symbol: string,
+  lmt = 30,
+): Promise<{ date: string; close: number }[]> {
+  try {
+    const url =
+      `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${secidOf(symbol)}` +
+      `&klt=101&fqt=0&lmt=${lmt}&end=20500101&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55`
+    const json = await fetchJson<{ data?: { klines?: string[] } }>(url)
+    const rows = json?.data?.klines ?? []
+    if (rows.length >= 2) {
+      // 东财行：date,open,close,high,low,volume
+      return rows.map((l) => {
+        const p = l.split(',')
+        return { date: p[0], close: Number(p[2]) }
+      })
+    }
+  } catch {
+    // 落到新浪
   }
+  return fetchKlineSina(symbol, lmt)
 }
 
-/** 首板判定：
- *  - 昨日涨停价必须基于「前日收盘价」计算，再判断昨日收盘是否触及
- *    （此前用昨日收盘价算它自己的涨停价，恒不成立 ⇒ 永远判成首板）
- *  - 昨日未封板 + 今日已封板 ⇒ 首板
- *  - 昨日已封板 ⇒ 连板，按累计涨幅粗估连板数
+/** 两根 K 线是否可视为「相邻交易日」
+ *  正常 1 天；跨周末 3 天；清明/端午等小长假 ≤ 5 天。
+ *  超过则中间缺了交易日，不能当相邻处理（否则多日累计涨幅会被误判成单日涨停）。
  */
-function judgeFirstBoard(
-  prevPrevClose: number,
-  prevClose: number,
+const MAX_ADJACENT_GAP_DAYS = 5
+function isAdjacentTradingDay(earlier: string, later: string): boolean {
+  if (!earlier || !later) return false
+  const a = new Date(`${earlier}T00:00:00`).getTime()
+  const b = new Date(`${later}T00:00:00`).getTime()
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return false
+  const gap = Math.abs(b - a) / 86400000
+  return gap <= MAX_ADJACENT_GAP_DAYS
+}
+
+/** 某一日是否涨停：以前一日 close 计算当日涨停价，再看当日 close 是否触及 */
+function isBarLimitUp(prevClose: number, close: number, code: string): boolean {
+  if (prevClose <= 0 || close <= 0) return false
+  const [, upLimit] = limitPrices(prevClose, code)
+  return close >= upLimit - 0.05
+}
+
+/**
+ * 首板 / 连板判定：从「昨日」往前回溯，数连续涨停的交易日天数。
+ *
+ * 三个坑（都踩过）：
+ *  1. 早期用今日单日涨幅反推连板数 —— 单日最多涨 10%/20%，n 恒 ≈ 1
+ *     ⇒ boardCount 恒为 2，永远出不了 3 连板 / 4 连板；
+ *  2. 只看昨日一天 ⇒ 无法表达多连板；
+ *  3. 直接从最后一根 K 线盲目回溯 —— 新浪日 K 会缺交易日
+ *     （实测缺 2026-09-25，09-24 直接跳到 09-28），会把不连续的日期
+ *     当成连续，误判成 5 连板。
+ *
+ * 因此这里先用「行情快照的昨收」在日 K 里锚定真正的「昨日」那根，
+ * 再从它往前回溯，避免跳空误判。
+ *
+ * @param bars 日 K（升序）
+ * @param code 股票代码（判断板块涨跌停阈值）
+ * @param todaySealed 今日是否已封板（行情快照判定，比日 K 实时）
+ * @param quotePrevClose 行情快照给出的昨收（权威锚点）
+ */
+function judgeBoard(
+  bars: { date: string; close: number }[],
   code: string,
-  todayChangePct: number,
-): {
-  isFirstBoard: boolean
-  boardCount: number
-} {
-  if (prevPrevClose <= 0 || prevClose <= 0) {
-    return { isFirstBoard: true, boardCount: 1 }
+  todaySealed: boolean,
+  quotePrevClose: number,
+): { isFirstBoard: boolean; boardCount: number } {
+  if (!todaySealed) return { isFirstBoard: true, boardCount: 1 }
+  if (bars.length < 2) return { isFirstBoard: true, boardCount: 1 }
+
+  const today = ymd(new Date())
+  // 锚定「昨日」：日 K 中 close 等于行情昨收的那一根（取最后一根匹配）
+  let idx = -1
+  if (quotePrevClose > 0) {
+    for (let i = bars.length - 1; i >= 0; i--) {
+      if (Math.abs(bars[i].close - quotePrevClose) < 0.02) {
+        idx = i
+        break
+      }
+    }
   }
-  // 昨日涨停上限（基于前日 close）
-  const [, prevUpLimit] = limitPrices(prevPrevClose, code)
-  // 昨日 close 触及昨日涨停价 ⇒ 昨日已封板 ⇒ 今日为连板
-  const yesterdaySealed = prevClose >= prevUpLimit - 0.05
-  if (!yesterdaySealed) return { isFirstBoard: true, boardCount: 1 }
-  // 昨日已涨停 ⇒ 连板；按涨幅幅度粗估连板次数（仅供参考）
-  const code2 = code.toLowerCase()
-  const pct =
-    code2.startsWith('300') ||
-    code2.startsWith('301') ||
-    code2.startsWith('688') ||
-    code2.startsWith('689')
-      ? 0.2
-      : code2.startsWith('8') || code2.startsWith('920') || code2.startsWith('430')
-        ? 0.3
-        : 0.1
-  // 累计涨幅 ≈ (1+pct)^n - 1 ≥ todayChangePct/100
-  const ratio = 1 + todayChangePct / 100
-  const n = ratio > 0 ? Math.log(ratio) / Math.log(1 + pct) : 1
-  return { isFirstBoard: false, boardCount: Math.max(2, Math.round(n)) }
+  // 没匹配上（日 K 滞后 / 昨收缺失）：退化为「最后一根非今日」的那根
+  if (idx < 0) {
+    idx = bars.length - 1
+    if (bars[idx].date === today) idx--
+  }
+  if (idx < 1) return { isFirstBoard: true, boardCount: 1 }
+
+  // streak 含今日（今日已封板）
+  let streak = 1
+  for (let i = idx; i >= 1; i--) {
+    // 日 K 会缺交易日（实测新浪缺 09-25、还整段缺 09-07~09-18）。
+    // 若两根间隔过大，中间的涨幅是「多日累计」而非单日涨停，必须中断，
+    // 否则会把跨十几天的巧合涨幅算进连板数。
+    if (!isAdjacentTradingDay(bars[i - 1].date, bars[i].date)) break
+    if (isBarLimitUp(bars[i - 1].close, bars[i].close, code)) streak++
+    else break
+  }
+
+  return streak === 1
+    ? { isFirstBoard: true, boardCount: 1 }
+    : { isFirstBoard: false, boardCount: streak }
 }
 
 /** 组装列表项（不查 K 线） */
@@ -862,19 +911,6 @@ async function fetchStockDailyKline(symbol: string, lmt = 30): Promise<
     // 落到新浪
   }
   return fetchKlineSina(symbol, lmt)
-}
-
-/** 判定某日是否涨停：当日收盘价 >= 当日涨停价 - 0.05（与首板判定一致的容差）
- *  涨停价是基于本前一日 close → multiplier，本函数从「当日的前一根」开始遍历避免重复计算
- */
-function isBarLimitUp(
-  prevClose: number,
-  close: number,
-  code: string,
-): boolean {
-  if (prevClose <= 0 || close <= 0) return false
-  const [, upLimit] = limitPrices(prevClose, code)
-  return close >= upLimit - 0.05
 }
 
 /** 单只涨停股：统计涨停次数（最近 30 个交易日） */
