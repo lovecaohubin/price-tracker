@@ -9,11 +9,39 @@ type Section = 'metric' | 'industry' | 'height' | 'rank' | 'times'
 const pct = (v: number | null | undefined, digits = 2) =>
   v == null ? '—' : `${v >= 0 ? '+' : ''}${(v * 100).toFixed(digits)}%`
 
+/** 入参已是「亿元」（后端已 /1e8），输出带单位，如 +1.83 亿
+ *  用于潮扑指数 / 行业统计（它们的 *Yi 字段后端已转换）
+ */
 const yi = (v: number | null | undefined) =>
   v == null ? '—' : `${v >= 0 ? '+' : ''}${v.toFixed(2)} 亿`
 
-const yiAbs = (v: number | null | undefined) =>
-  v == null ? '—' : `${Math.abs(v).toFixed(2)} 亿`
+/** 自适应小数位：金额统一 2 位（亿级够用且标准）；
+ *  极小金额（< 0.01 亿，即不足 100 万）多留 2 位，避免显示成 0.00 */
+const yiDigits = (y: number): number => (Math.abs(y) >= 0.01 ? 2 : 4)
+
+/** 入参是「元」→ 转成「亿元」数字（排行专用：标题已标「（亿）」，
+ *  这里只输出数字不带单位，且保留正负号）
+ *  ⚠️ 排行拿到的是 ZtListItem 原始字段（sealedAmt / mainNet），单位是元，
+ *     必须 /1e8 才是亿；直接 toFixed 会显示成上亿倍的错误数字
+ */
+const yiNumFromYuan = (v: number | null | undefined): string => {
+  if (v == null) return '—'
+  const y = v / 1e8
+  return y.toFixed(yiDigits(y))
+}
+
+/** 入参是「元」→ 转成「亿元」绝对值数字（封单金额这类无正负的金额） */
+const yiAbsNumFromYuan = (v: number | null | undefined): string => {
+  if (v == null) return '—'
+  const y = Math.abs(v) / 1e8
+  return y.toFixed(yiDigits(y))
+}
+
+/** 入参已是「亿元」→ 输出纯数字（表格列标题已标「（亿）」，避免重复单位） */
+const yiNum = (v: number | null | undefined): string => {
+  if (v == null) return '—'
+  return `${v >= 0 ? '+' : ''}${v.toFixed(yiDigits(v))}`
+}
 
 /**
  * 涨停分析面板（首版涨停 Tab 内右侧栏）
@@ -239,7 +267,7 @@ function IndustrySection({ data }: { data: ZtAnalysisResponse }) {
               <td
                 className={`zt-anly-td-net ${row.mainNetYi >= 0 ? 'up' : 'down'}`}
               >
-                {yi(row.mainNetYi)}
+                {yiNum(row.mainNetYi)}
               </td>
               <td
                 className={`zt-anly-td-pct ${row.avgChangePct >= 0 ? 'up' : 'down'}`}
@@ -311,7 +339,7 @@ function RankSection({ data }: { data: ZtAnalysisResponse }) {
     {
       title: '封单金额 Top 10（亿）',
       rows: data.topSealed,
-      value: (i) => yiAbs(i.sealedAmt),
+      value: (i) => yiAbsNumFromYuan(i.sealedAmt),
     },
     {
       title: '换手率 Top 10',
@@ -321,7 +349,7 @@ function RankSection({ data }: { data: ZtAnalysisResponse }) {
     {
       title: '主力净流入 Top 10（亿）',
       rows: data.topMainNet,
-      value: (i) => yi(i.mainNet),
+      value: (i) => yiNumFromYuan(i.mainNet),
     },
   ]
   return (
