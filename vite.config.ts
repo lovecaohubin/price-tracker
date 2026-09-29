@@ -122,7 +122,8 @@ function klinePlugin(): Plugin {
         const symbol = url.searchParams.get('symbol')
         const period = (url.searchParams.get('period') || 'day') as 'day' | 'week'
 
-        if (!symbol || !/^(sh|sz)\d{6}$/i.test(symbol)) {
+        // 支持 sh（沪）/ sz（深）/ bj（北交所）
+        if (!symbol || !/^(sh|sz|bj)\d{6}$/i.test(symbol)) {
           res.writeHead(400, { 'Content-Type': 'application/json' })
           res.end(JSON.stringify({ error: 'Invalid symbol' }))
           return
@@ -134,7 +135,10 @@ function klinePlugin(): Plugin {
         // fqt=0 不复权，返回真实成交价；周线拉 1500 根，覆盖自 2000 年以来全部周K
         const code = symbol.toLowerCase()
         const cacheKey = `${code}_${period}`
-        const secid = `${code.startsWith('sh') ? '1' : '0'}.${code.slice(2)}`
+        // secid: 沪市(sh)→1.xxxxxx，深市(sz)→0.xxxxxx，北交所(bj)→2.xxxxxx
+        const secid = `${
+          code.startsWith('sh') ? '1' : code.startsWith('bj') ? '2' : '0'
+        }.${code.slice(2)}`
         const klt = period === 'week' ? '102' : '101'
         const lmt = period === 'week' ? '1500' : '300'
         const apiUrl = `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${secid}&klt=${klt}&fqt=0&lmt=${lmt}&end=20500101&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61`
@@ -200,8 +204,14 @@ function klinePlugin(): Plugin {
             return
           }
           console.error(`[K线中间件] ${symbol}(${period}) 最终失败:`, msg)
-          res.writeHead(502, { 'Content-Type': 'application/json' })
-          res.end(JSON.stringify({ error: msg }))
+          // 降级返回 200 + 空 K 线，而不是 502：
+          // 价格来自腾讯行情、本就不依赖 K 线；返回 502 会让前端把它当成
+          // 硬失败，新添加的标的（无本地缓存）会一直停在占位 0。
+          // 空 K 线下前端自动用当日 high/low 兜底 52 周新高、历史最高。
+          res.setHeader('Content-Type', 'application/json; charset=utf-8')
+          res.setHeader('Access-Control-Allow-Origin', '*')
+          res.setHeader('X-Kline-Cache', 'EMPTY')
+          res.end(JSON.stringify({ data: { klines: [] } }))
         }
       })
     },

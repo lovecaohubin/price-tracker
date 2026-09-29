@@ -82,7 +82,11 @@ async function loadKlineRows(
   }
 
   try {
-    const resp = await fetch(`/api/kline?symbol=${symbol}&period=${period}`);
+    // 超时保护：新添加的标的没有本地缓存，东财限流时可能长时间挂起，
+    // 不能让它拖住整个资产卡片（价格来自腾讯行情，本就不依赖 K 线）
+    const resp = await fetch(`/api/kline?symbol=${symbol}&period=${period}`, {
+      signal: AbortSignal.timeout(8000),
+    });
     const isStale = resp.headers.get('X-Kline-Cache') === 'STALE';
     if (!resp.ok) return { rows: null, stale: false };
 
@@ -159,8 +163,14 @@ export async function fetchAssetData(symbol: string, externalQuote?: QuoteResult
   const recentKlines: PricePoint[] = [];
 
   try {
+    // 日线 / 周线并行拉取：此前是串行 await，新添加的股票没有本地 K 线缓存、
+    // 要打东财（易限流 502 / 超时），串行会让耗时翻倍，期间卡片一直显示占位 0
+    const [dayResult, weekResult] = await Promise.all([
+      loadKlineRows(code, 'day'),
+      loadKlineRows(code, 'week'),
+    ]);
+
     // 日线(不复权)：52周新高(近250个交易日) + 近30天走势图
-    const dayResult = await loadKlineRows(code, 'day');
     const dayRows = dayResult.rows;
     if (dayRows) {
       console.log(`[${symbol}] 日线 ${dayRows.length} 条`);
@@ -173,7 +183,6 @@ export async function fetchAssetData(symbol: string, externalQuote?: QuoteResult
     }
 
     // 周线(不复权)：历史最高 + 2000年以来历史最低
-    const weekResult = await loadKlineRows(code, 'week');
     const weekRows = weekResult.rows;
     if (weekRows) {
       console.log(`[${symbol}] 周线 ${weekRows.length} 条`);
