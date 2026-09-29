@@ -646,7 +646,11 @@ function rowToListItem(
     volumeRatio: num(row.f10),
     industry: row.f100 ? String(row.f100) : null,
     sealedAmt: num(row.f39),
-    mainNet: num(row.f60),
+    // ⚠️ 主力净流入是 f62，不是 f60。
+    // 实测核对：众捷股份成交额 4.56 亿、主力占比 11.16% ⇒ 主力净流入约 0.51 亿，
+    // f62 = 5088.7 万（吻合），而 f60 = 4.34 亿（几乎等于全部成交额，明显不是主力口径）。
+    // 用错 f60 会让数值虚高十几倍（曾显示某 ST 股主力净流入 111 亿）。
+    mainNet: num(row.f62),
     isFirstBoard: judge.isFirstBoard,
     boardCount: judge.boardCount,
     symbol,
