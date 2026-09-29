@@ -20,6 +20,7 @@ import '../App.css';
 const STORAGE_KEY_TRACKED = 'price-tracker:tracked-symbols';
 const STORAGE_KEY_SEED = 'price-tracker:seed-version';
 const STORAGE_KEY_SHARES = 'price-tracker:shares';
+const STORAGE_KEY_CUSTOM_NAMES = 'price-tracker:custom-names';
 // 修改 defaultSymbols 后递增此值，旧浏览器会自动重置为新默认列表
 const SEED_VERSION = 3;
 
@@ -46,6 +47,28 @@ function persistTrackedSymbols(symbols: string[]) {
   try { localStorage.setItem(STORAGE_KEY_TRACKED, JSON.stringify(symbols)); } catch {}
 }
 
+// 自定义名称：按 symbol 持久化，避免被 refreshAll 的行情名称覆盖
+function loadCustomNames(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_CUSTOM_NAMES);
+    if (raw) {
+      const obj = JSON.parse(raw);
+      if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+        const out: Record<string, string> = {};
+        for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
+          if (typeof v === 'string' && v.trim()) out[k] = v.trim();
+        }
+        return out;
+      }
+    }
+  } catch {}
+  return {};
+}
+
+function persistCustomNames(names: Record<string, string>) {
+  try { localStorage.setItem(STORAGE_KEY_CUSTOM_NAMES, JSON.stringify(names)); } catch {}
+}
+
 // 持仓股数：按代码存储，与行情数据解耦，刷新行情不会丢失
 function loadShares(): Record<string, number> {
   try {
@@ -69,9 +92,14 @@ function persistShares(shares: Record<string, number>) {
 }
 
 function Dashboard() {
-  const [assets, setAssets] = useState<Asset[]>(() =>
-    loadTrackedSymbols().map(createPlaceholder)
-  );
+  const [assets, setAssets] = useState<Asset[]>(() => {
+    // 自定义名称优先，避免首屏（行情返回前）显示成股票代码
+    const custom = loadCustomNames();
+    return loadTrackedSymbols().map(s => {
+      const p = createPlaceholder(s);
+      return custom[s] ? { ...p, name: custom[s] } : p;
+    });
+  });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdate, setLastUpdate] = useState('');
@@ -93,6 +121,9 @@ function Dashboard() {
     assetsRef.current = assets;
   }, [assets]);
 
+  // 自定义名称（优先于行情返回的官方名称）
+  const customNamesRef = useRef<Record<string, string>>(loadCustomNames());
+
   // 并发锁：定时刷新与手动刷新叠加会让请求翻倍，挤占浏览器连接导致 fetch 失败
   const inFlight = useRef(false);
 
@@ -106,21 +137,46 @@ function Dashboard() {
     try {
       // 多个资产合并成 1 次行情请求，而不是每个资产各发一次
       const quotes = await fetchQuotes(symbols);
+
+      // 先用行情把「名称 / 价格」填上（毫秒级）：完整数据要等 K 线，
+      // 东财限流时最长 8s，期间卡片会一直停在旧值 / 代码占位
+      if (quotes.size > 0) {
+        setAssets(prev => prev.map(a => {
+          const q = quotes.get(a.symbol);
+          if (!q) return a;
+          return {
+            ...a,
+            name: customNamesRef.current[a.symbol] || q.name || a.name,
+            currentPrice: q.currentPrice,
+            changePercent: Math.round(q.changePercent * 100) / 100,
+            high52Week: a.high52Week || q.high,
+            allTimeHigh: a.allTimeHigh || q.high,
+            lowSince2000: a.lowSince2000 || q.low,
+            turnoverRate: Math.round(q.turnoverRate * 100) / 100,
+          };
+        }));
+      }
+
       const results = await Promise.allSettled(
         symbols.map(s => fetchAssetData(s, quotes.get(s)))
       );
 
       const updated: Asset[] = [];
       results.forEach((r, i) => {
+        const custom = customNamesRef.current[symbols[i]];
         if (r.status === 'fulfilled' && r.value) {
           updated.push({
             ...createPlaceholder(symbols[i]),
             ...r.value,
             id: symbols[i],
+            // 自定义名称优先于行情返回的官方名称
+            name: custom || r.value.name,
           } as Asset);
         } else {
           const prev = assetsRef.current.find(a => a.symbol === symbols[i]);
-          updated.push({ ...(prev || createPlaceholder(symbols[i])) });
+          const base = { ...(prev || createPlaceholder(symbols[i])) };
+          if (custom) base.name = custom;
+          updated.push(base);
         }
       });
       setAssets(updated);
@@ -204,6 +260,13 @@ function Dashboard() {
     if (selectedAsset?.id === id) setSelectedAsset(null);
     // 同步持久化：用 ref 读取最新列表避免闭包 stale
     persistTrackedSymbols(assetsRef.current.filter(a => a.id !== id).map(a => a.symbol));
+    // 一并清理该标的的自定义名称
+    if (customNamesRef.current[id]) {
+      const next = { ...customNamesRef.current };
+      delete next[id];
+      customNamesRef.current = next;
+      persistCustomNames(next);
+    }
   };
 
   const handleAdd = async (symbol: string, customName?: string) => {
@@ -216,14 +279,49 @@ function Dashboard() {
     setAssets(prev => [...prev, customName ? { ...placeholder, name: customName } : placeholder]);
     persistTrackedSymbols([...assetsRef.current.map(a => a.symbol), symbol]);
 
-    // 异步加载新资产数据
-    const data = await fetchAssetData(symbol);
+    // 自定义名称持久化，否则后续 refreshAll 会被行情的官方名称覆盖
+    if (customName) {
+      const next = { ...customNamesRef.current, [symbol]: customName };
+      customNamesRef.current = next;
+      persistCustomNames(next);
+    }
+
+    // 第一步：先用腾讯行情把「名称 / 价格」填上（毫秒级）。
+// 此前直接 await fetchAssetData，而它内部要等 K 线（东财限流时最长 8s），
+// 这段时间卡片一直显示 createPlaceholder 的占位 —— 名称就是股票代码。
+let quote: Parameters<typeof fetchAssetData>[1] = undefined
+    try {
+      quote = (await fetchQuotes([symbol])).get(symbol)
+    } catch {
+      // 行情失败则交给下面的完整加载兜底
+    }
+
+    const q0 = quote
+    if (q0 && q0.name) {
+      setAssets(prev => prev.map(a =>
+        a.symbol === symbol
+          ? {
+              ...a,
+              name: customName || q0.name || a.name,
+              currentPrice: q0.currentPrice,
+              changePercent: Math.round(q0.changePercent * 100) / 100,
+              high52Week: a.high52Week || q0.high,
+              allTimeHigh: a.allTimeHigh || q0.high,
+              lowSince2000: a.lowSince2000 || q0.low,
+              turnoverRate: Math.round(q0.turnoverRate * 100) / 100,
+            }
+          : a
+      ))
+    }
+
+    // 第二步：拉完整数据（含 K 线）；复用上面的行情结果，不重复请求
+    const data = await fetchAssetData(symbol, q0 ?? undefined)
     if (data) {
       setAssets(prev => prev.map(a =>
         a.symbol === symbol
           ? { ...a, ...data, id: symbol, name: customName || data.name } as Asset
           : a
-      ));
+      ))
     }
 
     // 添加后再主动全量刷新一次：定时刷新只在 9-15 点执行，收盘后（如 16 点）
