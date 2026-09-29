@@ -201,10 +201,25 @@
   text-overflow: ellipsis;
 }
 
-.zt-td-volume,
 .zt-td-main {
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+/* 首次封板时间：居中，有时间值时高亮 */
+.zt-th-seal {
+  text-align: center;
+}
+
+.zt-td-seal {
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+}
+
+.zt-td-seal.has-time {
+  color: var(--text-1);
+  font-weight: 600;
 }
 
 .zt-td-price.up,

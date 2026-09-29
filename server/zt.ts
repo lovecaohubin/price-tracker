@@ -345,6 +345,59 @@ async function fetchZtPoolSina(): Promise<{
   return { rows, tradeDate: ymd(new Date()), errorMsg: null }
 }
 
+/** 分钟 K 缓存（按 symbol）：当日分钟线拉一次够用，避免刷新时重复请求 */
+const minuteCache = new Map<
+  string,
+  { bars: { time: string; high: number }[]; expireAt: number }
+>()
+const MINUTE_TTL_MS = 5 * 60 * 1000
+
+/** 当日 5 分钟 K（含时间戳），用于计算「首次封板时间」
+ *  东财分钟线接口不稳，直接用新浪 CN_MarketDataService（实测可用）
+ */
+async function fetchTodayMinuteBars(
+  symbol: string,
+): Promise<{ time: string; high: number }[]> {
+  const hit = minuteCache.get(symbol)
+  if (hit && hit.expireAt > Date.now()) return hit.bars
+  const url =
+    'https://quotes.sina.cn/cn/api/json_v2.php/CN_MarketDataService.getKLineData' +
+    `?symbol=${symbol}&scale=5&ma=no&datalen=60`
+  const json = await fetchJsonSina<
+    { day?: string; high?: string }[]
+  >(url)
+  if (!Array.isArray(json)) return []
+  const bars = json.map((r) => ({
+    time: String(r.day ?? ''),
+    high: Number(r.high ?? 0),
+  }))
+  minuteCache.set(symbol, { bars, expireAt: Date.now() + MINUTE_TTL_MS })
+  return bars
+}
+
+/** 首次封板时间：当日分钟 K 中最高价首次触及涨停价的时刻（返回 HH:mm） */
+async function calcFirstSealTime(
+  symbol: string,
+  prevClose: number,
+  code: string,
+): Promise<string | null> {
+  try {
+    if (prevClose <= 0) return null
+    const [, upLimit] = limitPrices(prevClose, code)
+    if (upLimit <= 0) return null
+    const bars = await fetchTodayMinuteBars(symbol)
+    const today = ymd(new Date())
+    for (const b of bars) {
+      // 新浪分钟 K 的 day 形如 "2026-09-29 09:35:00"
+      if (!b.time.startsWith(today)) continue
+      if (b.high >= upLimit - 0.05) return b.time.slice(11, 16)
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
 /** 新浪行 → ZtListItem（主力净流入 / 封单金额 / 行业 新浪不提供，降级为 null） */
 function sinaRowToListItem(
   row: SinaRankRow,
@@ -399,8 +452,8 @@ async function buildItemsFromEm(
     rows.map(async ({ row, symbol, prevClose, changePct }) => {
       const code = String(row.f12 ?? '')
       let judge = { isFirstBoard: true, boardCount: 1 }
+      let firstSealTime: string | null = null
       try {
-        const bars = await fetchKlineBars(symbol, 30)
         // 今日已封板：行情快照判定（f2==f15 且达涨停价），比日 K 更实时
         const todaySealed = isSealedUp(
           num(row.f2) ?? 0,
@@ -408,11 +461,19 @@ async function buildItemsFromEm(
           prevClose,
           code,
         )
+        // 日 K（连板判定）与分钟 K（首次封板时间）并行拉取，省一半时间
+        const [bars, sealTime] = await Promise.all([
+          fetchKlineBars(symbol, 30),
+          calcFirstSealTime(symbol, prevClose, code),
+        ])
         judge = judgeBoard(bars, code, todaySealed, prevClose)
+        firstSealTime = sealTime
       } catch {
         judge = { isFirstBoard: true, boardCount: 1 }
       }
-      items.push(rowToListItem(row, symbol, prevClose, changePct, judge))
+      const item = rowToListItem(row, symbol, prevClose, changePct, judge)
+      item.firstSealTime = firstSealTime
+      items.push(item)
     }),
   )
   return items
@@ -427,17 +488,25 @@ async function buildItemsFromSina(
     rows.map(async ({ row, symbol, prevClose, changePct }) => {
       const code = String(row.code ?? '')
       let judge = { isFirstBoard: true, boardCount: 1 }
+      let firstSealTime: string | null = null
       try {
-        const bars = await fetchKlineBars(symbol, 30)
         // 今日已封板：现价 == 最高价 且达涨停价
         const trade = num(row.trade) ?? 0
         const high = num(row.high) ?? 0
         const todaySealed = isSealedUp(trade, high, prevClose, code)
+        // 日 K（连板判定）与分钟 K（首次封板时间）并行拉取
+        const [bars, sealTime] = await Promise.all([
+          fetchKlineBars(symbol, 30),
+          calcFirstSealTime(symbol, prevClose, code),
+        ])
         judge = judgeBoard(bars, code, todaySealed, prevClose)
+        firstSealTime = sealTime
       } catch {
         judge = { isFirstBoard: true, boardCount: 1 }
       }
-      items.push(sinaRowToListItem(row, symbol, prevClose, changePct, judge))
+      const item = sinaRowToListItem(row, symbol, prevClose, changePct, judge)
+      item.firstSealTime = firstSealTime
+      items.push(item)
     }),
   )
   return items

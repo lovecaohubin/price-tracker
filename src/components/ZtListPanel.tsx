@@ -15,13 +15,6 @@ const yuan2yi = (yuan: number | null | undefined) => {
   const sign = yuan >= 0 ? '+' : ''
   return `${sign}${(yuan / 1e8).toFixed(2)} 亿`
 }
-const wanShou = (hands: number | null | undefined) => {
-  if (hands == null) return '—'
-  // 1 手 = 100 股
-  const wan = (hands * 100) / 1e4
-  if (wan >= 10000) return `${(wan / 10000).toFixed(2)} 亿股`
-  return `${wan.toFixed(0)} 万股`
-}
 const yuanYiAbs = (yuan: number | null | undefined) => {
   if (yuan == null) return '—'
   return `${Math.abs(yuan / 1e8).toFixed(2)} 亿`
@@ -243,7 +236,12 @@ export default function ZtListPanel({ showDetail = true }: Props) {
               <th className="zt-th-price">价格</th>
               <th className="zt-th-change">涨幅</th>
               <th className="zt-th-industry">行业</th>
-              <th className="zt-th-volume">成交量</th>
+              <th
+                className="zt-th-seal"
+                title="当日分钟 K 中最高价首次触及涨停价的时刻（5 分钟级精度）"
+              >
+                首次封板
+              </th>
               <th className="zt-th-main">主力净额</th>
             </tr>
           </thead>
@@ -327,7 +325,9 @@ function ZtRow({
         {pct(item.changePct)}
       </td>
       <td className="zt-td-industry">{item.industry ?? '—'}</td>
-      <td className="zt-td-volume">{wanShou(item.volumeHands)}</td>
+      <td className={`zt-td-seal ${item.firstSealTime ? 'has-time' : ''}`}>
+        {item.firstSealTime ?? '—'}
+      </td>
       <td
         className={`zt-td-main ${item.mainNet == null ? 'is-na' : item.mainNet >= 0 ? 'up' : 'down'}`}
       >

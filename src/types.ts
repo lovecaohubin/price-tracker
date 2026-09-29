@@ -242,6 +242,10 @@ export interface ZtListItem {
   boardCount: number;
   /** 板块代码 sh/sz 已加前缀（如 sh603248） */
   symbol: string;
+  /** 首次封板时间（HH:mm，5 分钟级精度；取不到时为 null）
+   *  当日分钟 K 中最高价首次触及涨停价的时刻
+   */
+  firstSealTime?: string | null;
 }
 
 /** 首版涨停列表接口响应 */
