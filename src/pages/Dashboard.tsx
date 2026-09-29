@@ -21,7 +21,7 @@ const STORAGE_KEY_TRACKED = 'price-tracker:tracked-symbols';
 const STORAGE_KEY_SEED = 'price-tracker:seed-version';
 const STORAGE_KEY_SHARES = 'price-tracker:shares';
 // 修改 defaultSymbols 后递增此值，旧浏览器会自动重置为新默认列表
-const SEED_VERSION = 2;
+const SEED_VERSION = 3;
 
 // 从 localStorage 读取已跟踪的代码列表；种子版本变更时重置为新默认值
 function loadTrackedSymbols(): string[] {

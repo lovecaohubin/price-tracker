@@ -7,7 +7,6 @@ export const defaultSymbols = [
   'sz300847',  // 中船汉光
   'sh603267',  // 鸿远电子
   'sh512170',  // 医疗ETF
-  'sh516610',  // 医疗服务ETF
 ];
 
 // A股默认跟踪（兼容旧引用）
@@ -47,10 +46,10 @@ export const availableAShares = [
   { name: '中国中铁', symbol: 'sh601390' },
 ];
 
-// ETF 列表
+// ETF 列表（名称与行情接口返回保持一致：sh516610 实际为「医疗设备ETF大成」）
 export const availableETFs = [
-  { name: '医疗ETF',       symbol: 'sh512170' },
-  { name: '医疗服务ETF',   symbol: 'sh516610' },
+  { name: '医疗ETF',           symbol: 'sh512170' },
+  { name: '医疗设备ETF大成',   symbol: 'sh516610' },
 ];
 
 // 所有资产统一查找
