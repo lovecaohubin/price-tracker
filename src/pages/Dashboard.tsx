@@ -137,8 +137,13 @@ function Dashboard() {
   }, []);
 
   // 初始加载
+  // ⚠️ 必须用「已持久化的跟踪列表」而不是 defaultSymbols：
+  // refreshAll 内部会 setAssets(updated)，只保留传入的 symbols。
+  // 之前传 defaultSymbols 会把用户通过「添加跟踪」新增的股票覆盖掉，
+  // 表现为刷新页面后新增资产消失。
   useEffect(() => {
-    refreshAll(defaultSymbols);
+    const symbols = assetsRef.current.map(a => a.symbol);
+    if (symbols.length > 0) refreshAll(symbols);
   }, [refreshAll]);
 
   // 跟踪列表同步给「股票分析」模块（服务端 15:01 定时任务的数据源）
@@ -201,19 +206,23 @@ function Dashboard() {
     persistTrackedSymbols(assetsRef.current.filter(a => a.id !== id).map(a => a.symbol));
   };
 
-  const handleAdd = async (symbol: string) => {
+  const handleAdd = async (symbol: string, customName?: string) => {
     const exists = assets.find(a => a.symbol === symbol);
     if (exists) return;
 
     setShowAddForm(false);
-    setAssets(prev => [...prev, createPlaceholder(symbol)]);
+    // 先落占位（自定义名称优先，避免行情返回前显示代码），再异步拉真实数据
+    const placeholder = createPlaceholder(symbol);
+    setAssets(prev => [...prev, customName ? { ...placeholder, name: customName } : placeholder]);
     persistTrackedSymbols([...assetsRef.current.map(a => a.symbol), symbol]);
 
     // 异步加载新资产数据
     const data = await fetchAssetData(symbol);
     if (data) {
       setAssets(prev => prev.map(a =>
-        a.symbol === symbol ? { ...a, ...data, id: symbol } as Asset : a
+        a.symbol === symbol
+          ? { ...a, ...data, id: symbol, name: customName || data.name } as Asset
+          : a
       ));
     }
   };

@@ -47,8 +47,49 @@
   color: var(--text-1);
 }
 
-.search-input {
-  margin: 0 24px 16px;
+/* ===== 自定义输入表单 ===== */
+.add-form-body {
+  padding: 0 24px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.add-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.add-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-2);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.add-required,
+.add-optional {
+  font-style: normal;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 5px;
+}
+
+.add-required {
+  color: #b91c1c;
+  background: #fef2f2;
+}
+
+.add-optional {
+  color: var(--text-3);
+  background: #f1f5f9;
+}
+
+.add-input {
   padding: 10px 14px;
   border: 1px solid var(--line-strong);
   border-radius: 11px;
@@ -58,73 +99,76 @@
   transition: border-color 0.18s, box-shadow 0.18s;
 }
 
-.search-input::placeholder {
+.add-input::placeholder {
   color: #b6bdca;
 }
 
-.search-input:focus {
+.add-input:focus {
   border-color: var(--primary);
   box-shadow: var(--ring);
 }
 
-.asset-list {
-  overflow-y: auto;
-  flex: 1;
-  padding: 0 10px 16px;
-}
-
-.asset-option {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 11px 14px;
-  margin: 2px 0;
-  border-radius: 11px;
-  cursor: pointer;
-  transition: background 0.15s, transform 0.15s;
-}
-
-.asset-option:hover {
-  background: #f6f8ff;
-  transform: translateX(2px);
-}
-
-.option-info {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.option-name {
-  font-weight: 600;
-  font-size: 14px;
-  color: var(--text-1);
-}
-
-.option-symbol {
+.add-hint {
+  font-size: 11.5px;
   color: var(--text-3);
-  font-size: 13px;
 }
 
-.option-add {
-  font-size: 13px;
-  font-weight: 600;
+.add-hint strong {
   color: var(--primary-dark);
-  padding: 4px 12px;
-  border-radius: 8px;
-  background: var(--primary-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.add-error {
+  margin: 0;
+  padding: 9px 12px;
+  font-size: 12.5px;
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 9px;
+}
+
+.add-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.btn-cancel,
+.btn-confirm {
+  padding: 9px 20px;
+  border-radius: 10px;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
   transition: all 0.15s;
 }
 
-.asset-option:hover .option-add {
+.btn-cancel {
+  border: 1px solid var(--line-strong);
+  background: #fff;
+  color: var(--text-2);
+}
+
+.btn-cancel:hover {
+  background: #f8fafc;
+  color: var(--text-1);
+}
+
+.btn-confirm {
+  border: none;
   background: var(--primary);
   color: #fff;
   box-shadow: 0 3px 10px rgba(99, 102, 241, 0.28);
 }
 
-.no-result {
-  text-align: center;
-  padding: 30px;
-  color: var(--text-3);
-  font-size: 14px;
+.btn-confirm:hover:not(:disabled) {
+  background: var(--primary-dark);
+}
+
+.btn-confirm:disabled {
+  background: #cbd5e1;
+  box-shadow: none;
+  cursor: not-allowed;
 }
